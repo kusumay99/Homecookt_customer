@@ -1,7 +1,7 @@
 import {
   useCallback,
   useEffect,
-  useState,
+  useState
 } from "react";
 
 import {
@@ -14,11 +14,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Location from "expo-location";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -33,6 +34,18 @@ import { useApp } from "./_layout";
 // ============================================================
 
 const BASE_URL = "https://api.homecookt.com";
+
+// ============================================================
+// NEARBY SEARCH RADIUS
+// ============================================================
+//
+// Change this to 5, 10, 15, etc.
+//
+// 10 = 10 kilometers
+//
+// ============================================================
+
+const NEARBY_RADIUS_KM = 10;
 
 // ============================================================
 // COLORS
@@ -98,141 +111,173 @@ export default function HomeScreen() {
     useState(null);
 
   // ==========================================================
+  // LOCATION STATE
+  // ==========================================================
+
+  const [
+    currentLocation,
+    setCurrentLocation,
+  ] = useState(null);
+
+  const [
+    locationLoading,
+    setLocationLoading,
+  ] = useState(true);
+
+  const [
+    locationError,
+    setLocationError,
+  ] = useState("");
+
+  // ==========================================================
   // THEME COLORS
   // ==========================================================
 
-  const backgroundColor = isDarkMode
-    ? COLORS.dark
-    : COLORS.background;
+  const backgroundColor =
+    isDarkMode
+      ? COLORS.dark
+      : COLORS.background;
 
-  const cardColor = isDarkMode
-    ? "#1A1816"
-    : COLORS.white;
+  const cardColor =
+    isDarkMode
+      ? "#1A1816"
+      : COLORS.white;
 
-  const textColor = isDarkMode
-    ? COLORS.white
-    : COLORS.dark;
+  const textColor =
+    isDarkMode
+      ? COLORS.white
+      : COLORS.dark;
 
-  const mutedColor = isDarkMode
-    ? "#AAAAAA"
-    : COLORS.muted;
+  const mutedColor =
+    isDarkMode
+      ? "#AAAAAA"
+      : COLORS.muted;
 
-  const borderColor = isDarkMode
-    ? "#33302D"
-    : COLORS.border;
+  const borderColor =
+    isDarkMode
+      ? "#33302D"
+      : COLORS.border;
 
   // ==========================================================
   // TOKEN
   // ==========================================================
 
-  const getToken = useCallback(async () => {
-    try {
-      const token =
-        await AsyncStorage.getItem(
-          "access_token"
-        );
+  const getToken =
+    useCallback(async () => {
+      try {
+        const keys = [
+          "access_token",
+          "accessToken",
+          "token",
+        ];
 
-      if (
-        !token ||
-        !token.trim()
-      ) {
+        for (const key of keys) {
+          const token =
+            await AsyncStorage.getItem(
+              key
+            );
+
+          if (
+            token &&
+            token.trim()
+          ) {
+            return token.trim();
+          }
+        }
+
         console.log(
           "HOME TOKEN: Access token not found"
         );
 
         return null;
+      } catch (error) {
+        console.log(
+          "TOKEN ERROR:",
+          error
+        );
+
+        return null;
       }
-
-      return token;
-    } catch (error) {
-      console.log(
-        "TOKEN ERROR:",
-        error
-      );
-
-      return null;
-    }
-  }, []);
+    }, []);
 
   // ==========================================================
   // USER
   // ==========================================================
 
-  const loadUser = useCallback(async () => {
-    try {
-      const storedUser =
-        await AsyncStorage.getItem(
-          "user"
-        );
-
-      // ------------------------------------------------------
-      // Stored complete user object
-      // ------------------------------------------------------
-
-      if (storedUser) {
-        try {
-          const parsedUser =
-            JSON.parse(storedUser);
-
-          if (
-            parsedUser &&
-            typeof parsedUser === "object"
-          ) {
-            setUser(parsedUser);
-
-            return;
-          }
-        } catch (error) {
-          console.log(
-            "USER PARSE ERROR:",
-            error
+  const loadUser =
+    useCallback(async () => {
+      try {
+        const storedUser =
+          await AsyncStorage.getItem(
+            "user"
           );
+
+        if (storedUser) {
+          try {
+            const parsedUser =
+              JSON.parse(
+                storedUser
+              );
+
+            if (
+              parsedUser &&
+              typeof parsedUser ===
+                "object"
+            ) {
+              setUser(
+                parsedUser
+              );
+
+              return;
+            }
+          } catch (error) {
+            console.log(
+              "USER PARSE ERROR:",
+              error
+            );
+          }
         }
+
+        const name =
+          await AsyncStorage.getItem(
+            "name"
+          );
+
+        const image =
+          await AsyncStorage.getItem(
+            "image"
+          );
+
+        const email =
+          await AsyncStorage.getItem(
+            "email"
+          );
+
+        setUser({
+          name: name || "",
+          image: image || "",
+          email: email || "",
+        });
+      } catch (error) {
+        console.log(
+          "LOAD USER ERROR:",
+          error
+        );
       }
-
-      // ------------------------------------------------------
-      // Individual stored values
-      // ------------------------------------------------------
-
-      const name =
-        await AsyncStorage.getItem(
-          "name"
-        );
-
-      const image =
-        await AsyncStorage.getItem(
-          "image"
-        );
-
-      const email =
-        await AsyncStorage.getItem(
-          "email"
-        );
-
-      setUser({
-        name: name || "",
-        image: image || "",
-        email: email || "",
-      });
-    } catch (error) {
-      console.log(
-        "LOAD USER ERROR:",
-        error
-      );
-    }
-  }, []);
+    }, []);
 
   // ==========================================================
   // HEADERS
   // ==========================================================
 
-  const getHeaders = useCallback(
-    async () => {
+  const getHeaders =
+    useCallback(async () => {
       const token =
         await getToken();
 
       return {
-        Accept: "application/json",
+        Accept:
+          "application/json",
 
         "Content-Type":
           "application/json",
@@ -244,9 +289,7 @@ export default function HomeScreen() {
             }
           : {}),
       };
-    },
-    [getToken]
-  );
+    }, [getToken]);
 
   // ==========================================================
   // JSON RESPONSE
@@ -263,7 +306,9 @@ export default function HomeScreen() {
         }
 
         try {
-          return JSON.parse(text);
+          return JSON.parse(
+            text
+          );
         } catch (error) {
           console.log(
             "JSON PARSE ERROR:",
@@ -280,94 +325,86 @@ export default function HomeScreen() {
   // IMAGE VALIDATION
   // ==========================================================
 
-  const isValidImage = useCallback(
-    (value) => {
-      if (
-        !value ||
-        typeof value !== "string"
-      ) {
-        return false;
-      }
+  const isValidImage =
+    useCallback(
+      (value) => {
+        if (
+          !value ||
+          typeof value !==
+            "string"
+        ) {
+          return false;
+        }
 
-      const trimmed =
-        value.trim();
+        const trimmed =
+          value.trim();
 
-      return (
-        trimmed.startsWith(
-          "http://"
-        ) ||
-        trimmed.startsWith(
-          "https://"
-        )
-      );
-    },
-    []
-  );
+        return (
+          trimmed.startsWith(
+            "http://"
+          ) ||
+          trimmed.startsWith(
+            "https://"
+          )
+        );
+      },
+      []
+    );
 
   // ==========================================================
   // FOOD IMAGE
   // ==========================================================
 
-  const getFoodImage = useCallback(
-    (food) => {
-      if (!food) {
-        return null;
-      }
-
-      const images = [
-        food.image,
-        food.image_url,
-        food.food_image,
-        food.imageUrl,
-        food.photo,
-        food.photo_url,
-        food.thumbnail,
-      ];
-
-      // ------------------------------------------------------
-      // images[]
-      // ------------------------------------------------------
-
-      if (
-        Array.isArray(
-          food.images
-        )
-      ) {
-        images.push(
-          ...food.images
-        );
-      }
-
-      // ------------------------------------------------------
-      // image_urls[]
-      // ------------------------------------------------------
-
-      if (
-        Array.isArray(
-          food.image_urls
-        )
-      ) {
-        images.push(
-          ...food.image_urls
-        );
-      }
-
-      // ------------------------------------------------------
-      // Find first valid URL
-      // ------------------------------------------------------
-
-      for (const image of images) {
-        if (
-          isValidImage(image)
-        ) {
-          return image.trim();
+  const getFoodImage =
+    useCallback(
+      (food) => {
+        if (!food) {
+          return null;
         }
-      }
 
-      return null;
-    },
-    [isValidImage]
-  );
+        const images = [
+          food.image,
+          food.image_url,
+          food.food_image,
+          food.imageUrl,
+          food.photo,
+          food.photo_url,
+          food.thumbnail,
+          food.food_photo,
+        ];
+
+        if (
+          Array.isArray(
+            food.images
+          )
+        ) {
+          images.push(
+            ...food.images
+          );
+        }
+
+        if (
+          Array.isArray(
+            food.image_urls
+          )
+        ) {
+          images.push(
+            ...food.image_urls
+          );
+        }
+
+        for (const image of images) {
+          if (
+            isValidImage(image)
+          ) {
+            return image.trim();
+          }
+        }
+
+        return null;
+      },
+      [isValidImage]
+    );
 
   // ==========================================================
   // NORMALIZE FOOD
@@ -378,7 +415,8 @@ export default function HomeScreen() {
       (item) => {
         if (
           !item ||
-          typeof item !== "object"
+          typeof item !==
+            "object"
         ) {
           return null;
         }
@@ -435,9 +473,11 @@ export default function HomeScreen() {
           description:
             foodDescription,
 
-          price: foodPrice,
+          price:
+            foodPrice,
 
-          rating: foodRating,
+          rating:
+            foodRating,
 
           image:
             getFoodImage(item),
@@ -451,273 +491,757 @@ export default function HomeScreen() {
   // ==========================================================
 
   const extractFoods =
-    useCallback((data) => {
-      // Direct array
-      if (
-        Array.isArray(data)
-      ) {
-        return data;
-      }
+    useCallback(
+      (data) => {
+        if (
+          Array.isArray(data)
+        ) {
+          return data;
+        }
 
-      // fooditems
-      if (
-        Array.isArray(
-          data?.fooditems
-        )
-      ) {
-        return data.fooditems;
-      }
+        if (
+          Array.isArray(
+            data?.fooditems
+          )
+        ) {
+          return data.fooditems;
+        }
 
-      // foods
-      if (
-        Array.isArray(
-          data?.foods
-        )
-      ) {
-        return data.foods;
-      }
+        if (
+          Array.isArray(
+            data?.foods
+          )
+        ) {
+          return data.foods;
+        }
 
-      // items
-      if (
-        Array.isArray(
-          data?.items
-        )
-      ) {
-        return data.items;
-      }
+        if (
+          Array.isArray(
+            data?.items
+          )
+        ) {
+          return data.items;
+        }
 
-      // data
-      if (
-        Array.isArray(
-          data?.data
-        )
-      ) {
-        return data.data;
-      }
+        if (
+          Array.isArray(
+            data?.data
+          )
+        ) {
+          return data.data;
+        }
 
-      // recommendations
-      if (
-        Array.isArray(
-          data?.recommendations
-        )
-      ) {
-        return data.recommendations;
-      }
+        if (
+          Array.isArray(
+            data?.recommendations
+          )
+        ) {
+          return data.recommendations;
+        }
 
-      return [];
+        return [];
+      },
+      []
+    );
+
+  // ==========================================================
+  // GET CURRENT LOCATION
+  // ==========================================================
+
+  const getCurrentLocation =
+    useCallback(async () => {
+      try {
+        setLocationLoading(
+          true
+        );
+
+        setLocationError("");
+
+        console.log(
+          "GETTING CURRENT LOCATION..."
+        );
+
+        const servicesEnabled =
+          await Location.hasServicesEnabledAsync();
+
+        if (!servicesEnabled) {
+          console.log(
+            "LOCATION SERVICES DISABLED"
+          );
+
+          setLocationError(
+            "Please enable location services."
+          );
+
+          setCurrentLocation(
+            null
+          );
+
+          return null;
+        }
+
+        let permission =
+          await Location.getForegroundPermissionsAsync();
+
+        if (
+          permission.status !==
+          "granted"
+        ) {
+          permission =
+            await Location.requestForegroundPermissionsAsync();
+        }
+
+        if (
+          permission.status !==
+          "granted"
+        ) {
+          console.log(
+            "LOCATION PERMISSION DENIED"
+          );
+
+          setLocationError(
+            "Location permission is required to show nearby food."
+          );
+
+          setCurrentLocation(
+            null
+          );
+
+          return null;
+        }
+
+        const location =
+          await Location.getCurrentPositionAsync(
+            {
+              accuracy:
+                Location.Accuracy.High,
+            }
+          );
+
+        const latitude =
+          location.coords.latitude;
+
+        const longitude =
+          location.coords.longitude;
+
+        console.log(
+          "CURRENT LATITUDE =>",
+          latitude
+        );
+
+        console.log(
+          "CURRENT LONGITUDE =>",
+          longitude
+        );
+
+        const locationData = {
+          latitude,
+          longitude,
+        };
+
+        setCurrentLocation(
+          locationData
+        );
+
+        return locationData;
+      } catch (error) {
+        console.log(
+          "CURRENT LOCATION ERROR =>",
+          error
+        );
+
+        setLocationError(
+          "Unable to get your current location."
+        );
+
+        setCurrentLocation(
+          null
+        );
+
+        return null;
+      } finally {
+        setLocationLoading(
+          false
+        );
+      }
     }, []);
+
+  // ==========================================================
+  // CONVERT COORDINATE TO NUMBER
+  // ==========================================================
+
+  const toNumber =
+    useCallback((value) => {
+      if (
+        value === null ||
+        value === undefined ||
+        value === ""
+      ) {
+        return null;
+      }
+
+      const number =
+        Number(value);
+
+      return Number.isFinite(
+        number
+      )
+        ? number
+        : null;
+    }, []);
+
+  // ==========================================================
+  // GET LATITUDE FROM FOOD / KITCHEN
+  // ==========================================================
+
+  const getLatitude =
+    useCallback(
+      (food) => {
+        if (!food) {
+          return null;
+        }
+
+        const candidates = [
+          food.latitude,
+          food.lat,
+
+          food.kitchen_latitude,
+          food.kitchen_lat,
+
+          food.kitchen?.latitude,
+          food.kitchen?.lat,
+
+          food.kitchen_data
+            ?.latitude,
+
+          food.kitchenData
+            ?.latitude,
+
+          food.location
+            ?.latitude,
+
+          food.coordinates
+            ?.latitude,
+
+          food.coordinates
+            ?.lat,
+
+          food.kitchen
+            ?.location
+            ?.latitude,
+
+          food.kitchen
+            ?.location
+            ?.lat,
+
+          food.kitchen
+            ?.coordinates
+            ?.latitude,
+
+          food.kitchen
+            ?.coordinates
+            ?.lat,
+        ];
+
+        for (
+          const value of candidates
+        ) {
+          const number =
+            toNumber(value);
+
+          if (
+            number !== null &&
+            number >= -90 &&
+            number <= 90
+          ) {
+            return number;
+          }
+        }
+
+        return null;
+      },
+      [toNumber]
+    );
+
+  // ==========================================================
+  // GET LONGITUDE FROM FOOD / KITCHEN
+  // ==========================================================
+
+  const getLongitude =
+    useCallback(
+      (food) => {
+        if (!food) {
+          return null;
+        }
+
+        const candidates = [
+          food.longitude,
+          food.lng,
+          food.lon,
+
+          food.kitchen_longitude,
+          food.kitchen_lng,
+          food.kitchen_lon,
+
+          food.kitchen?.longitude,
+          food.kitchen?.lng,
+          food.kitchen?.lon,
+
+          food.kitchen_data
+            ?.longitude,
+
+          food.kitchenData
+            ?.longitude,
+
+          food.location
+            ?.longitude,
+
+          food.location
+            ?.lng,
+
+          food.coordinates
+            ?.longitude,
+
+          food.coordinates
+            ?.lng,
+
+          food.kitchen
+            ?.location
+            ?.longitude,
+
+          food.kitchen
+            ?.location
+            ?.lng,
+
+          food.kitchen
+            ?.coordinates
+            ?.longitude,
+
+          food.kitchen
+            ?.coordinates
+            ?.lng,
+        ];
+
+        for (
+          const value of candidates
+        ) {
+          const number =
+            toNumber(value);
+
+          if (
+            number !== null &&
+            number >= -180 &&
+            number <= 180
+          ) {
+            return number;
+          }
+        }
+
+        return null;
+      },
+      [toNumber]
+    );
+
+  // ==========================================================
+  // HAVERSINE DISTANCE
+  // ==========================================================
+  //
+  // Returns distance in KM.
+  //
+  // ==========================================================
+
+  const calculateDistanceKm =
+    useCallback(
+      (
+        lat1,
+        lon1,
+        lat2,
+        lon2
+      ) => {
+        const earthRadiusKm =
+          6371;
+
+        const dLat =
+          ((lat2 - lat1) *
+            Math.PI) /
+          180;
+
+        const dLon =
+          ((lon2 - lon1) *
+            Math.PI) /
+          180;
+
+        const a =
+          Math.sin(
+            dLat / 2
+          ) **
+            2 +
+          Math.cos(
+            (lat1 * Math.PI) /
+              180
+          ) *
+            Math.cos(
+              (lat2 * Math.PI) /
+                180
+            ) *
+            Math.sin(
+              dLon / 2
+            ) **
+              2;
+
+        const c =
+          2 *
+          Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1 - a)
+          );
+
+        return (
+          earthRadiusKm * c
+        );
+      },
+      []
+    );
+
+  // ==========================================================
+  // ADD DISTANCE TO FOOD
+  // ==========================================================
+
+  const addDistanceToFood =
+    useCallback(
+      (
+        foods,
+        location
+      ) => {
+        if (
+          !Array.isArray(
+            foods
+          )
+        ) {
+          return [];
+        }
+
+        if (!location) {
+          return [];
+        }
+
+        const {
+          latitude:
+            userLatitude,
+          longitude:
+            userLongitude,
+        } = location;
+
+        const foodsWithDistance =
+          foods
+            .map((food) => {
+              const kitchenLatitude =
+                getLatitude(
+                  food
+                );
+
+              const kitchenLongitude =
+                getLongitude(
+                  food
+                );
+
+              // --------------------------------------------
+              // Kitchen has no GPS
+              // --------------------------------------------
+
+              if (
+                kitchenLatitude ===
+                  null ||
+                kitchenLongitude ===
+                  null
+              ) {
+                return null;
+              }
+
+              const distance =
+                calculateDistanceKm(
+                  userLatitude,
+                  userLongitude,
+                  kitchenLatitude,
+                  kitchenLongitude
+                );
+
+              return {
+                ...food,
+
+                distance_km:
+                  Number(
+                    distance.toFixed(
+                      2
+                    )
+                  ),
+              };
+            })
+            .filter(Boolean)
+            .filter(
+              (food) =>
+                food.distance_km <=
+                NEARBY_RADIUS_KM
+            )
+            .sort(
+              (a, b) =>
+                a.distance_km -
+                b.distance_km
+            );
+
+        console.log(
+          `NEARBY FOOD: ${foodsWithDistance.length} items within ${NEARBY_RADIUS_KM} KM`
+        );
+
+        return foodsWithDistance;
+      },
+      [
+        getLatitude,
+        getLongitude,
+        calculateDistanceKm,
+      ]
+    );
 
   // ==========================================================
   // ALL FOODS
   // ==========================================================
 
   const fetchAllFoods =
-    useCallback(async () => {
-      try {
-        const headers =
-          await getHeaders();
+    useCallback(
+      async (
+        locationOverride = null
+      ) => {
+        try {
+          const headers =
+            await getHeaders();
 
-        const response =
-          await fetch(
-            `${BASE_URL}/api/v1/get/fooditems`,
-            {
-              method: "GET",
-              headers,
-            }
-          );
+          const response =
+            await fetch(
+              `${BASE_URL}/api/v1/get/fooditems`,
+              {
+                method: "GET",
+                headers,
+              }
+            );
 
-        const data =
-          await parseJsonResponse(
-            response
-          );
+          const data =
+            await parseJsonResponse(
+              response
+            );
 
-        console.log(
-          "ALL FOODS STATUS:",
-          response.status
-        );
-
-        console.log(
-          "ALL FOODS:",
-          data
-        );
-
-        if (!response.ok) {
           console.log(
-            "ALL FOODS API ERROR:",
+            "ALL FOODS STATUS:",
             response.status
+          );
+
+          if (!response.ok) {
+            console.log(
+              "ALL FOODS API ERROR:",
+              response.status
+            );
+
+            setAllFoods([]);
+
+            return [];
+          }
+
+          const foods =
+            extractFoods(data)
+              .map(
+                normalizeFood
+              )
+              .filter(Boolean);
+
+          // --------------------------------------------------
+          // FILTER BY CURRENT LOCATION
+          // --------------------------------------------------
+
+          const nearbyFoods =
+            addDistanceToFood(
+              foods,
+              locationOverride
+            );
+
+          setAllFoods(
+            nearbyFoods
+          );
+
+          return nearbyFoods;
+        } catch (error) {
+          console.log(
+            "ALL FOODS ERROR:",
+            error
           );
 
           setAllFoods([]);
 
           return [];
         }
-
-        const foods =
-          extractFoods(data)
-            .map(normalizeFood)
-            .filter(Boolean);
-
-        setAllFoods(foods);
-
-        return foods;
-      } catch (error) {
-        console.log(
-          "ALL FOODS ERROR:",
-          error
-        );
-
-        setAllFoods([]);
-
-        return [];
-      }
-    }, [
-      getHeaders,
-      parseJsonResponse,
-      extractFoods,
-      normalizeFood,
-    ]);
+      },
+      [
+        getHeaders,
+        parseJsonResponse,
+        extractFoods,
+        normalizeFood,
+        addDistanceToFood,
+      ]
+    );
 
   // ==========================================================
   // TOP RATED
   // ==========================================================
 
   const fetchTopRatedFoods =
-    useCallback(async () => {
-      try {
-        const headers =
-          await getHeaders();
+    useCallback(
+      async (
+        locationOverride = null
+      ) => {
+        try {
+          const headers =
+            await getHeaders();
 
-        const response =
-          await fetch(
-            `${BASE_URL}/api/v1/top-rated-foods`,
-            {
-              method: "GET",
-              headers,
-            }
-          );
+          const response =
+            await fetch(
+              `${BASE_URL}/api/v1/top-rated-foods`,
+              {
+                method: "GET",
+                headers,
+              }
+            );
 
-        const data =
-          await parseJsonResponse(
-            response
-          );
+          const data =
+            await parseJsonResponse(
+              response
+            );
 
-        console.log(
-          "TOP RATED STATUS:",
-          response.status
-        );
-
-        console.log(
-          "TOP RATED:",
-          data
-        );
-
-        if (!response.ok) {
           console.log(
-            "TOP RATED API ERROR:",
+            "TOP RATED STATUS:",
             response.status
+          );
+
+          if (!response.ok) {
+            setTopRatedFoods([]);
+
+            return [];
+          }
+
+          const foods =
+            extractFoods(data)
+              .map(
+                normalizeFood
+              )
+              .filter(Boolean);
+
+          const nearbyFoods =
+            addDistanceToFood(
+              foods,
+              locationOverride
+            );
+
+          setTopRatedFoods(
+            nearbyFoods
+          );
+
+          return nearbyFoods;
+        } catch (error) {
+          console.log(
+            "TOP RATED ERROR:",
+            error
           );
 
           setTopRatedFoods([]);
 
           return [];
         }
-
-        const foods =
-          extractFoods(data)
-            .map(normalizeFood)
-            .filter(Boolean);
-
-        setTopRatedFoods(foods);
-
-        return foods;
-      } catch (error) {
-        console.log(
-          "TOP RATED ERROR:",
-          error
-        );
-
-        setTopRatedFoods([]);
-
-        return [];
-      }
-    }, [
-      getHeaders,
-      parseJsonResponse,
-      extractFoods,
-      normalizeFood,
-    ]);
+      },
+      [
+        getHeaders,
+        parseJsonResponse,
+        extractFoods,
+        normalizeFood,
+        addDistanceToFood,
+      ]
+    );
 
   // ==========================================================
   // RECOMMENDED
   // ==========================================================
 
   const fetchRecommendedFoods =
-    useCallback(async () => {
-      try {
-        const headers =
-          await getHeaders();
+    useCallback(
+      async (
+        locationOverride = null
+      ) => {
+        try {
+          const headers =
+            await getHeaders();
 
-        const response =
-          await fetch(
-            `${BASE_URL}/api/v1/recommended-foods`,
-            {
-              method: "GET",
-              headers,
-            }
-          );
+          const response =
+            await fetch(
+              `${BASE_URL}/api/v1/recommended-foods`,
+              {
+                method: "GET",
+                headers,
+              }
+            );
 
-        const data =
-          await parseJsonResponse(
-            response
-          );
+          const data =
+            await parseJsonResponse(
+              response
+            );
 
-        console.log(
-          "RECOMMENDED STATUS:",
-          response.status
-        );
-
-        console.log(
-          "RECOMMENDED:",
-          data
-        );
-
-        if (!response.ok) {
           console.log(
-            "RECOMMENDED API ERROR:",
+            "RECOMMENDED STATUS:",
             response.status
           );
 
-          setRecommendedFoods([]);
+          if (!response.ok) {
+            setRecommendedFoods(
+              []
+            );
+
+            return [];
+          }
+
+          const foods =
+            extractFoods(data)
+              .map(
+                normalizeFood
+              )
+              .filter(Boolean);
+
+          const nearbyFoods =
+            addDistanceToFood(
+              foods,
+              locationOverride
+            );
+
+          setRecommendedFoods(
+            nearbyFoods
+          );
+
+          return nearbyFoods;
+        } catch (error) {
+          console.log(
+            "RECOMMENDED ERROR:",
+            error
+          );
+
+          setRecommendedFoods(
+            []
+          );
 
           return [];
         }
-
-        const foods =
-          extractFoods(data)
-            .map(normalizeFood)
-            .filter(Boolean);
-
-        setRecommendedFoods(
-          foods
-        );
-
-        return foods;
-      } catch (error) {
-        console.log(
-          "RECOMMENDED ERROR:",
-          error
-        );
-
-        setRecommendedFoods([]);
-
-        return [];
-      }
-    }, [
-      getHeaders,
-      parseJsonResponse,
-      extractFoods,
-      normalizeFood,
-    ]);
+      },
+      [
+        getHeaders,
+        parseJsonResponse,
+        extractFoods,
+        normalizeFood,
+        addDistanceToFood,
+      ]
+    );
 
   // ==========================================================
   // UNREAD NOTIFICATIONS
@@ -742,16 +1266,6 @@ export default function HomeScreen() {
           await parseJsonResponse(
             response
           );
-
-        console.log(
-          "UNREAD COUNT STATUS:",
-          response.status
-        );
-
-        console.log(
-          "UNREAD COUNT:",
-          data
-        );
 
         if (!response.ok) {
           setUnreadCount(0);
@@ -787,17 +1301,58 @@ export default function HomeScreen() {
 
   const loadHomeData =
     useCallback(
-      async (showLoader = true) => {
+      async (
+        showLoader = true
+      ) => {
         try {
           if (showLoader) {
-            setIsLoading(true);
+            setIsLoading(
+              true
+            );
           }
+
+          // --------------------------------------------------
+          // IMPORTANT:
+          // Get current GPS FIRST.
+          // --------------------------------------------------
+
+          const location =
+            await getCurrentLocation();
+
+          if (!location) {
+            setAllFoods([]);
+            setTopRatedFoods([]);
+            setRecommendedFoods(
+              []
+            );
+
+            await Promise.all([
+              loadUser(),
+              fetchUnreadCount(),
+            ]);
+
+            return;
+          }
+
+          // --------------------------------------------------
+          // Load only location-filtered food
+          // --------------------------------------------------
 
           await Promise.all([
             loadUser(),
-            fetchAllFoods(),
-            fetchTopRatedFoods(),
-            fetchRecommendedFoods(),
+
+            fetchAllFoods(
+              location
+            ),
+
+            fetchTopRatedFoods(
+              location
+            ),
+
+            fetchRecommendedFoods(
+              location
+            ),
+
             fetchUnreadCount(),
           ]);
         } catch (error) {
@@ -807,13 +1362,16 @@ export default function HomeScreen() {
           );
         } finally {
           if (showLoader) {
-            setIsLoading(false);
+            setIsLoading(
+              false
+            );
           }
 
           setRefreshing(false);
         }
       },
       [
+        getCurrentLocation,
         loadUser,
         fetchAllFoods,
         fetchTopRatedFoods,
@@ -827,21 +1385,7 @@ export default function HomeScreen() {
   // ==========================================================
 
   useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      if (!mounted) {
-        return;
-      }
-
-      await loadHomeData(true);
-    };
-
-    load();
-
-    return () => {
-      mounted = false;
-    };
+    loadHomeData(true);
   }, [loadHomeData]);
 
   // ==========================================================
@@ -857,7 +1401,9 @@ export default function HomeScreen() {
       setRefreshing(true);
 
       try {
-        await loadHomeData(false);
+        await loadHomeData(
+          false
+        );
       } catch (error) {
         console.log(
           "REFRESH ERROR:",
@@ -916,7 +1462,9 @@ export default function HomeScreen() {
       user?.profile_image ||
       user?.image_url;
 
-    return isValidImage(image)
+    return isValidImage(
+      image
+    )
       ? image.trim()
       : null;
   };
@@ -929,10 +1477,6 @@ export default function HomeScreen() {
     food
   ) => {
     if (!food) {
-      console.log(
-        "FOOD DATA MISSING"
-      );
-
       return;
     }
 
@@ -953,11 +1497,6 @@ export default function HomeScreen() {
 
       return;
     }
-
-    console.log(
-      "OPENING DISH:",
-      normalizedFood
-    );
 
     router.push({
       pathname:
@@ -985,15 +1524,12 @@ export default function HomeScreen() {
   // OPEN NOTIFICATIONS
   // ==========================================================
 
-  const openNotifications = () => {
-    // IMPORTANT:
-    // Your route file is Notification_screen.jsx
-    // NOT Notifications_screen.jsx
-
-    router.push(
-      "/Notification_screen"
-    );
-  };
+  const openNotifications =
+    () => {
+      router.push(
+        "/Notification_screen"
+      );
+    };
 
   // ==========================================================
   // FOOD CARD
@@ -1041,10 +1577,6 @@ export default function HomeScreen() {
           openDish(item)
         }
       >
-        {/* ==================================================
-            IMAGE
-        ================================================== */}
-
         <View
           style={
             styles.foodImageContainer
@@ -1076,8 +1608,6 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Rating */}
-
           <View
             style={
               styles.ratingBadge
@@ -1102,10 +1632,6 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
-
-        {/* ==================================================
-            DETAILS
-        ================================================== */}
 
         <View
           style={
@@ -1143,16 +1669,33 @@ export default function HomeScreen() {
               styles.foodBottom
             }
           >
-            <Text
-              style={
-                styles.price
-              }
-            >
-              ₹
-              {Number(
-                price || 0
-              ).toFixed(0)}
-            </Text>
+            <View>
+              <Text
+                style={
+                  styles.price
+                }
+              >
+                ₹
+                {Number(
+                  price || 0
+                ).toFixed(0)}
+              </Text>
+
+              {item?.distance_km !==
+                undefined && (
+                <Text
+                  style={[
+                    styles.distanceText,
+                    {
+                      color:
+                        mutedColor,
+                    },
+                  ]}
+                >
+                  {item.distance_km} km away
+                </Text>
+              )}
+            </View>
 
             <TouchableOpacity
               activeOpacity={0.8}
@@ -1218,8 +1761,6 @@ export default function HomeScreen() {
             openDish(item)
           }
         >
-          {/* IMAGE */}
-
           <View
             style={
               styles.horizontalImageContainer
@@ -1251,8 +1792,6 @@ export default function HomeScreen() {
               </View>
             )}
 
-            {/* Rating */}
-
             <View
               style={
                 styles.smallRating
@@ -1278,8 +1817,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* NAME */}
-
           <Text
             numberOfLines={1}
             style={[
@@ -1293,8 +1830,6 @@ export default function HomeScreen() {
             {name}
           </Text>
 
-          {/* PRICE */}
-
           <Text
             style={
               styles.horizontalPrice
@@ -1305,6 +1840,21 @@ export default function HomeScreen() {
               price || 0
             ).toFixed(0)}
           </Text>
+
+          {item?.distance_km !==
+            undefined && (
+            <Text
+              style={[
+                styles.distanceText,
+                {
+                  color:
+                    mutedColor,
+                },
+              ]}
+            >
+              {item.distance_km} km away
+            </Text>
+          )}
         </TouchableOpacity>
       );
     };
@@ -1329,7 +1879,9 @@ export default function HomeScreen() {
         <Ionicons
           name="restaurant-outline"
           size={30}
-          color={mutedColor}
+          color={
+            mutedColor
+          }
         />
 
         <Text
@@ -1345,6 +1897,139 @@ export default function HomeScreen() {
         </Text>
       </View>
     );
+
+  // ==========================================================
+  // LOCATION REQUIRED SCREEN
+  // ==========================================================
+
+  if (
+    !isLoading &&
+    !locationLoading &&
+    !currentLocation
+  ) {
+    return (
+      <SafeAreaView
+        style={[
+          styles.locationScreen,
+          {
+            backgroundColor:
+              backgroundColor,
+          },
+        ]}
+      >
+        <StatusBar
+          barStyle={
+            isDarkMode
+              ? "light-content"
+              : "dark-content"
+          }
+          backgroundColor={
+            backgroundColor
+          }
+        />
+
+        <View
+          style={
+            styles.locationCard
+          }
+        >
+          <View
+            style={
+              styles.locationIcon
+            }
+          >
+            <Ionicons
+              name="location"
+              size={42}
+              color={
+                COLORS.orange
+              }
+            />
+          </View>
+
+          <Text
+            style={[
+              styles.locationTitle,
+              {
+                color:
+                  textColor,
+              },
+            ]}
+          >
+            Location Required
+          </Text>
+
+          <Text
+            style={[
+              styles.locationDescription,
+              {
+                color:
+                  mutedColor,
+              },
+            ]}
+          >
+            We use your current location to show homemade food from kitchens near you.
+          </Text>
+
+          {locationError ? (
+            <Text
+              style={
+                styles.locationError
+              }
+            >
+              {locationError}
+            </Text>
+          ) : null}
+
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() =>
+              loadHomeData(
+                true
+              )
+            }
+            style={
+              styles.locationButton
+            }
+          >
+            <LinearGradient
+              colors={[
+                COLORS.orange,
+                COLORS.gold,
+              ]}
+              start={{
+                x: 0,
+                y: 0,
+              }}
+              end={{
+                x: 1,
+                y: 0,
+              }}
+              style={
+                styles.locationButtonGradient
+              }
+            >
+              <Ionicons
+                name="locate-outline"
+                size={20}
+                color={
+                  COLORS.white
+                }
+              />
+
+              <Text
+                style={
+                  styles.locationButtonText
+                }
+              >
+                Enable Location
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // ==========================================================
   // LOADING
@@ -1388,7 +2073,7 @@ export default function HomeScreen() {
             },
           ]}
         >
-          Loading delicious food...
+          Finding food near you...
         </Text>
       </SafeAreaView>
     );
@@ -1456,15 +2141,11 @@ export default function HomeScreen() {
             styles.header
           }
         >
-          {/* LEFT */}
-
           <View
             style={
               styles.headerLeft
             }
           >
-            {/* AVATAR */}
-
             <View
               style={
                 styles.avatarContainer
@@ -1503,8 +2184,6 @@ export default function HomeScreen() {
               )}
             </View>
 
-            {/* GREETING */}
-
             <View
               style={
                 styles.greetingContainer
@@ -1534,18 +2213,39 @@ export default function HomeScreen() {
               >
                 {getUserName()}
               </Text>
+
+              {/* CURRENT LOCATION */}
+
+              <View
+                style={
+                  styles.nearbyLabel
+                }
+              >
+                <Ionicons
+                  name="location"
+                  size={11}
+                  color={
+                    COLORS.orange
+                  }
+                />
+
+                <Text
+                  style={
+                    styles.nearbyLabelText
+                  }
+                >
+                  Food within{" "}
+                  {NEARBY_RADIUS_KM} km
+                </Text>
+              </View>
             </View>
           </View>
-
-          {/* RIGHT */}
 
           <View
             style={
               styles.headerRight
             }
           >
-            {/* THEME */}
-
             <TouchableOpacity
               activeOpacity={0.8}
               style={[
@@ -1567,12 +2267,6 @@ export default function HomeScreen() {
                   );
                 }
               }}
-              accessibilityRole="button"
-              accessibilityLabel={
-                isDarkMode
-                  ? "Switch to light mode"
-                  : "Switch to dark mode"
-              }
             >
               <Ionicons
                 name={
@@ -1589,8 +2283,6 @@ export default function HomeScreen() {
               />
             </TouchableOpacity>
 
-            {/* NOTIFICATIONS */}
-
             <TouchableOpacity
               activeOpacity={0.8}
               style={[
@@ -1605,8 +2297,6 @@ export default function HomeScreen() {
               onPress={
                 openNotifications
               }
-              accessibilityRole="button"
-              accessibilityLabel="Open notifications"
             >
               <Ionicons
                 name="notifications-outline"
@@ -1672,7 +2362,7 @@ export default function HomeScreen() {
             value=""
             editable={false}
             pointerEvents="none"
-            placeholder="Search for food..."
+            placeholder="Search nearby food..."
             placeholderTextColor={
               mutedColor
             }
@@ -1713,7 +2403,7 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              Recommended For You
+              Recommended Near You
             </Text>
 
             <Text
@@ -1725,7 +2415,7 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              Handpicked dishes for you
+              Handpicked dishes from nearby kitchens
             </Text>
           </View>
 
@@ -1774,7 +2464,7 @@ export default function HomeScreen() {
           </ScrollView>
         ) : (
           <EmptySection
-            text="No recommended food available"
+            text={`No recommended food within ${NEARBY_RADIUS_KM} km`}
           />
         )}
 
@@ -1800,7 +2490,7 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              Top Rated
+              Top Rated Nearby
             </Text>
 
             <Text
@@ -1812,7 +2502,7 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              Loved by our customers
+              Loved by customers near you
             </Text>
           </View>
 
@@ -1861,12 +2551,12 @@ export default function HomeScreen() {
           </ScrollView>
         ) : (
           <EmptySection
-            text="No top rated food available"
+            text={`No top rated food within ${NEARBY_RADIUS_KM} km`}
           />
         )}
 
         {/* ====================================================
-            ALL FOOD
+            ALL NEARBY FOOD
         ==================================================== */}
 
         <View
@@ -1887,7 +2577,7 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              All Food
+              Nearby Food
             </Text>
 
             <Text
@@ -1899,7 +2589,7 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              Explore homemade dishes
+              Homemade food from kitchens near you
             </Text>
           </View>
 
@@ -1944,7 +2634,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           <EmptySection
-            text="No food available"
+            text={`No food found within ${NEARBY_RADIUS_KM} km of your location`}
           />
         )}
 
@@ -1973,6 +2663,90 @@ const styles =
     scrollContent: {
       paddingHorizontal: 16,
       paddingBottom: 20,
+    },
+
+    // ==========================================================
+    // LOCATION SCREEN
+    // ==========================================================
+
+    locationScreen: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent:
+        "center",
+      paddingHorizontal: 25,
+    },
+
+    locationCard: {
+      width: "100%",
+      alignItems: "center",
+      padding: 30,
+      borderRadius: 25,
+      backgroundColor:
+        COLORS.white,
+      elevation: 5,
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: 5,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 15,
+    },
+
+    locationIcon: {
+      width: 85,
+      height: 85,
+      borderRadius: 42.5,
+      backgroundColor:
+        COLORS.lightOrange,
+      alignItems: "center",
+      justifyContent:
+        "center",
+      marginBottom: 20,
+    },
+
+    locationTitle: {
+      fontSize: 24,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+
+    locationDescription: {
+      fontSize: 14,
+      lineHeight: 22,
+      textAlign: "center",
+      marginTop: 10,
+    },
+
+    locationError: {
+      color: COLORS.red,
+      fontSize: 12,
+      textAlign: "center",
+      marginTop: 12,
+    },
+
+    locationButton: {
+      width: "100%",
+      height: 54,
+      borderRadius: 17,
+      overflow: "hidden",
+      marginTop: 22,
+    },
+
+    locationButtonGradient: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 8,
+    },
+
+    locationButtonText: {
+      color: COLORS.white,
+      fontSize: 16,
+      fontWeight: "700",
     },
 
     // ==========================================================
@@ -2026,6 +2800,19 @@ const styles =
     userName: {
       fontSize: 17,
       fontWeight: "700",
+    },
+
+    nearbyLabel: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 3,
+    },
+
+    nearbyLabelText: {
+      marginLeft: 3,
+      color: COLORS.orange,
+      fontSize: 10,
+      fontWeight: "600",
     },
 
     headerRight: {
@@ -2276,6 +3063,12 @@ const styles =
       color: COLORS.orange,
     },
 
+    distanceText: {
+      marginTop: 2,
+      fontSize: 9,
+      fontWeight: "500",
+    },
+
     arrowButton: {
       width: 34,
       height: 34,
@@ -2299,11 +3092,13 @@ const styles =
       justifyContent:
         "center",
       marginBottom: 22,
+      paddingHorizontal: 20,
     },
 
     emptyText: {
       marginTop: 7,
       fontSize: 12,
+      textAlign: "center",
     },
 
     // ==========================================================

@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import {
@@ -36,6 +37,9 @@ const CartScreen = forwardRef((props, ref) => {
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [finalTotal, setFinalTotal] = useState(0);
 
+  // food_id -> image URL
+  const [foodImageMap, setFoodImageMap] = useState({});
+
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
@@ -66,9 +70,33 @@ const CartScreen = forwardRef((props, ref) => {
   // TOKEN
   // ============================================================
 
-  const getToken = async () => {
+  const getToken = useCallback(async () => {
     try {
-      const token = await AsyncStorage.getItem("access_token");
+      const keys = [
+        "access_token",
+        "accessToken",
+        "token",
+      ];
+
+      const values = await AsyncStorage.multiGet(keys);
+
+      const token =
+        values.find(
+          ([key, value]) =>
+            key === "access_token" &&
+            value
+        )?.[1] ||
+        values.find(
+          ([key, value]) =>
+            key === "accessToken" &&
+            value
+        )?.[1] ||
+        values.find(
+          ([key, value]) =>
+            key === "token" &&
+            value
+        )?.[1] ||
+        null;
 
       console.log(
         "CART TOKEN =>",
@@ -80,13 +108,13 @@ const CartScreen = forwardRef((props, ref) => {
       console.log("GET TOKEN ERROR:", error);
       return null;
     }
-  };
+  }, []);
 
   // ============================================================
   // HEADERS
   // ============================================================
 
-  const getHeaders = async () => {
+  const getHeaders = useCallback(async () => {
     const token = await getToken();
 
     return {
@@ -98,156 +126,610 @@ const CartScreen = forwardRef((props, ref) => {
           }
         : {}),
     };
-  };
+  }, [getToken]);
+
+  // ============================================================
+  // NORMALIZE IMAGE
+  // ============================================================
+
+  const normalizeImageUrl = useCallback((image) => {
+    if (!image) {
+      return "";
+    }
+
+    // Array of images
+    if (Array.isArray(image)) {
+      for (const item of image) {
+        const normalized = normalizeImageUrl(item);
+
+        if (normalized) {
+          return normalized;
+        }
+      }
+
+      return "";
+    }
+
+    // Object image
+    if (typeof image === "object") {
+      return normalizeImageUrl(
+        image?.url ||
+          image?.uri ||
+          image?.image_url ||
+          image?.image ||
+          image?.src
+      );
+    }
+
+    if (typeof image !== "string") {
+      return "";
+    }
+
+    const trimmed = image.trim();
+
+    if (!trimmed) {
+      return "";
+    }
+
+    // Already complete URL
+    if (
+      trimmed.startsWith("http://") ||
+      trimmed.startsWith("https://")
+    ) {
+      return trimmed;
+    }
+
+    // Relative URL
+    if (trimmed.startsWith("/")) {
+      return `${BASE_URL}${trimmed}`;
+    }
+
+    return `${BASE_URL}/${trimmed}`;
+  }, []);
+
+  // ============================================================
+  // EXTRACT IMAGE FROM FOOD/CART OBJECT
+  // ============================================================
+
+  const extractFoodImage = useCallback(
+    (item) => {
+      if (!item) {
+        return "";
+      }
+
+      const possibleImages = [
+        item?.food_photo,
+        item?.food_image,
+        item?.image,
+        item?.image_url,
+        item?.image_urls,
+        item?.food?.food_photo,
+        item?.food?.food_image,
+        item?.food?.image,
+        item?.food?.image_url,
+        item?.food?.image_urls,
+        item?.foodItem?.food_photo,
+        item?.foodItem?.food_image,
+        item?.foodItem?.image,
+        item?.foodItem?.image_url,
+        item?.foodItem?.image_urls,
+      ];
+
+      for (const image of possibleImages) {
+        const normalized = normalizeImageUrl(image);
+
+        if (normalized) {
+          return normalized;
+        }
+      }
+
+      return "";
+    },
+    [normalizeImageUrl]
+  );
+
+  // ============================================================
+  // GET FOOD ID
+  // ============================================================
+
+  const getFoodId = useCallback((item) => {
+    if (!item) {
+      return null;
+    }
+
+    return (
+      item?.food_id ??
+      item?.foodId ??
+      item?.food?.food_id ??
+      item?.food?.id ??
+      item?.foodItem?.food_id ??
+      item?.foodItem?.id ??
+      item?.id ??
+      null
+    );
+  }, []);
+
+  // ============================================================
+  // FETCH FOOD IMAGES
+  //
+  // Cart API sometimes returns:
+  // food_photo: null
+  //
+  // So we fetch the food list and create:
+  //
+  // {
+  //   "43": "https://....jpg",
+  //   "45": "https://....jpg"
+  // }
+  // ============================================================
+
+  const fetchFoodImages = useCallback(
+    async (items, token) => {
+      try {
+        if (!Array.isArray(items) || items.length === 0) {
+          return;
+        }
+
+        const missingFoodIds = items
+          .filter((item) => {
+            const directImage =
+              extractFoodImage(item);
+
+            return !directImage;
+          })
+          .map((item) => getFoodId(item))
+          .filter(Boolean)
+          .map(String);
+
+        if (missingFoodIds.length === 0) {
+          return;
+        }
+
+        console.log(
+          "FETCHING FOOD IMAGES FOR IDS:",
+          missingFoodIds
+        );
+
+        const response = await fetch(
+          `${BASE_URL}/api/v1/get/fooditems`,
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              ...(token
+                ? {
+                    Authorization: `Bearer ${token}`,
+                  }
+                : {}),
+            },
+          }
+        );
+
+        const responseText =
+          await response.text();
+
+        console.log(
+          "FOOD ITEMS IMAGE API STATUS:",
+          response.status
+        );
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch (error) {
+          console.log(
+            "FOOD ITEMS JSON ERROR:",
+            error
+          );
+          return;
+        }
+
+        if (!response.ok) {
+          console.log(
+            "FOOD ITEMS IMAGE API ERROR:",
+            responseText
+          );
+          return;
+        }
+
+        // Support different possible API response formats
+        let foods = [];
+
+        if (Array.isArray(data)) {
+          foods = data;
+        } else if (
+          Array.isArray(data?.fooditems)
+        ) {
+          foods = data.fooditems;
+        } else if (
+          Array.isArray(data?.food_items)
+        ) {
+          foods = data.food_items;
+        } else if (
+          Array.isArray(data?.foods)
+        ) {
+          foods = data.foods;
+        } else if (
+          Array.isArray(data?.items)
+        ) {
+          foods = data.items;
+        } else if (
+          Array.isArray(data?.results)
+        ) {
+          foods = data.results;
+        } else if (
+          Array.isArray(data?.data)
+        ) {
+          foods = data.data;
+        }
+
+        console.log(
+          "FOOD ITEMS FOUND:",
+          foods.length
+        );
+
+        if (foods.length === 0) {
+          return;
+        }
+
+        const newImageMap = {};
+
+        foods.forEach((food) => {
+          const foodId =
+            food?.food_id ??
+            food?.foodId ??
+            food?.id ??
+            food?._id;
+
+          const image =
+            extractFoodImage(food);
+
+          if (
+            foodId !== undefined &&
+            foodId !== null &&
+            image
+          ) {
+            newImageMap[String(foodId)] =
+              image;
+          }
+        });
+
+        console.log(
+          "FOOD IMAGE MAP:",
+          newImageMap
+        );
+
+        if (
+          Object.keys(newImageMap).length > 0
+        ) {
+          setFoodImageMap((previous) => ({
+            ...previous,
+            ...newImageMap,
+          }));
+        }
+      } catch (error) {
+        console.log(
+          "FETCH FOOD IMAGES ERROR:",
+          error
+        );
+      }
+    },
+    [extractFoodImage, getFoodId]
+  );
+
+  // ============================================================
+  // GET IMAGE URL FOR CART ITEM
+  // ============================================================
+
+  const getImageUrl = useCallback(
+    (item) => {
+      // First use image directly returned by cart API
+      const directImage =
+        extractFoodImage(item);
+
+      if (directImage) {
+        return directImage;
+      }
+
+      // Then use food list mapping
+      const foodId = getFoodId(item);
+
+      if (foodId !== null) {
+        const mappedImage =
+          foodImageMap[String(foodId)];
+
+        if (mappedImage) {
+          return mappedImage;
+        }
+      }
+
+      console.log(
+        "NO CART IMAGE FOUND FOR ITEM:",
+        item
+      );
+
+      return "";
+    },
+    [
+      extractFoodImage,
+      getFoodId,
+      foodImageMap,
+    ]
+  );
 
   // ============================================================
   // FETCH CART
   // ============================================================
 
-  const fetchCart = useCallback(async (showLoader = true) => {
-    try {
-      if (showLoader) {
-        setIsLoading(true);
-      }
-
-      const headers = await getHeaders();
-
-      const response = await fetch(`${BASE_URL}/api/v1/cart`, {
-        method: "GET",
-        headers,
-      });
-
-      const responseText = await response.text();
-
-      console.log("GET CART STATUS:", response.status);
-      console.log("GET CART BODY:", responseText);
-
-      let data = {};
-
+  const fetchCart = useCallback(
+    async (showLoader = true) => {
       try {
-        data = responseText ? JSON.parse(responseText) : {};
+        if (showLoader) {
+          setIsLoading(true);
+        }
+
+        const token = await getToken();
+
+        const headers = {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...(token
+            ? {
+                Authorization: `Bearer ${token}`,
+              }
+            : {}),
+        };
+
+        const response = await fetch(
+          `${BASE_URL}/api/v1/cart`,
+          {
+            method: "GET",
+            headers,
+          }
+        );
+
+        const responseText =
+          await response.text();
+
+        console.log(
+          "GET CART STATUS:",
+          response.status
+        );
+
+        console.log(
+          "GET CART BODY:",
+          responseText
+        );
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch (error) {
+          console.log(
+            "CART JSON PARSE ERROR:",
+            error
+          );
+        }
+
+        if (response.ok) {
+          const items = Array.isArray(
+            data?.items
+          )
+            ? data.items
+            : Array.isArray(data)
+            ? data
+            : [];
+
+          const subtotal = Number(
+            data?.cart_summary
+              ?.grand_total ??
+              data?.grand_total ??
+              data?.subtotal ??
+              0
+          );
+
+          const apiDeliveryFee =
+            Number(
+              data?.kitchen?.delivery_fee ??
+                data?.delivery_fee ??
+                0
+            );
+
+          const totalWithDelivery =
+            subtotal + apiDeliveryFee;
+
+          setCartItems(items);
+          setGrandTotal(subtotal);
+          setDeliveryFee(
+            apiDeliveryFee
+          );
+          setFinalTotal(
+            totalWithDelivery
+          );
+
+          console.log(
+            "================================"
+          );
+          console.log(
+            "CART SUCCESS"
+          );
+          console.log(
+            "Cart Items:",
+            items
+          );
+          console.log(
+            "Subtotal:",
+            subtotal
+          );
+          console.log(
+            "Delivery Fee:",
+            apiDeliveryFee
+          );
+          console.log(
+            "Final Total:",
+            totalWithDelivery
+          );
+          console.log(
+            "================================"
+          );
+
+          // Load missing food images
+          await fetchFoodImages(
+            items,
+            token
+          );
+        } else if (
+          response.status === 401
+        ) {
+          console.log(
+            "CART 401 - TOKEN EXPIRED"
+          );
+
+          setCartItems([]);
+          setCartCount(0);
+          setGrandTotal(0);
+          setDeliveryFee(0);
+          setFinalTotal(0);
+
+          Alert.alert(
+            "Session Expired",
+            "Please login again to view your cart.",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  router.replace(
+                    "/Login_screen"
+                  );
+                },
+              },
+            ]
+          );
+        } else {
+          const errorMessage =
+            data?.detail ||
+            data?.message ||
+            `Failed to load cart (${response.status})`;
+
+          Alert.alert(
+            "Cart Error",
+            errorMessage
+          );
+        }
       } catch (error) {
-        console.log("CART JSON PARSE ERROR:", error);
-      }
-
-      if (response.ok) {
-        const items = Array.isArray(data?.items)
-          ? data.items
-          : [];
-
-        const subtotal = Number(
-          data?.cart_summary?.grand_total ?? 0
+        console.log(
+          "GET CART ERROR:",
+          error
         );
-
-        const apiDeliveryFee = Number(
-          data?.kitchen?.delivery_fee ?? 0
-        );
-
-        const totalWithDelivery =
-          subtotal + apiDeliveryFee;
-
-        setCartItems(items);
-        setGrandTotal(subtotal);
-        setDeliveryFee(apiDeliveryFee);
-        setFinalTotal(totalWithDelivery);
-
-        console.log("================================");
-        console.log("CART SUCCESS");
-        console.log("Cart Items:", items);
-        console.log("Subtotal:", subtotal);
-        console.log("Delivery Fee:", apiDeliveryFee);
-        console.log("Final Total:", totalWithDelivery);
-        console.log("================================");
-      } else if (response.status === 401) {
-        console.log("CART 401 - TOKEN EXPIRED");
-
-        setCartItems([]);
-        setGrandTotal(0);
-        setDeliveryFee(0);
-        setFinalTotal(0);
 
         Alert.alert(
-          "Session Expired",
-          "Please login again to view your cart."
+          "Connection Error",
+          "Unable to connect to the server. Please check your internet connection."
         );
-      } else {
-        const errorMessage =
-          data?.detail ||
-          data?.message ||
-          `Failed to load cart (${response.status})`;
-
-        Alert.alert("Cart Error", errorMessage);
+      } finally {
+        if (showLoader) {
+          setIsLoading(false);
+        }
       }
-    } catch (error) {
-      console.log("GET CART ERROR:", error);
-
-      Alert.alert(
-        "Connection Error",
-        "Unable to connect to the server. Please check your internet connection."
-      );
-    } finally {
-      if (showLoader) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+    },
+    [
+      getToken,
+      fetchFoodImages,
+    ]
+  );
 
   // ============================================================
   // FETCH CART COUNT
   // ============================================================
 
-  const fetchCartCount = useCallback(async () => {
-    try {
-      const headers = await getHeaders();
-
-      const response = await fetch(
-        `${BASE_URL}/api/v1/cart/count`,
-        {
-          method: "GET",
-          headers,
-        }
-      );
-
-      const responseText = await response.text();
-
-      let data = {};
-
+  const fetchCartCount =
+    useCallback(async () => {
       try {
-        data = responseText ? JSON.parse(responseText) : {};
+        const headers =
+          await getHeaders();
+
+        const response =
+          await fetch(
+            `${BASE_URL}/api/v1/cart/count`,
+            {
+              method: "GET",
+              headers,
+            }
+          );
+
+        const responseText =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch (error) {
+          console.log(
+            "COUNT JSON PARSE ERROR:",
+            error
+          );
+        }
+
+        if (response.ok) {
+          const count = Number(
+            data?.count ?? 0
+          );
+
+          setCartCount(count);
+
+          console.log(
+            "Cart Count:",
+            count
+          );
+        } else if (
+          response.status === 401
+        ) {
+          console.log(
+            "CART COUNT 401"
+          );
+        }
       } catch (error) {
-        console.log("COUNT JSON PARSE ERROR:", error);
+        console.log(
+          "CART COUNT ERROR:",
+          error
+        );
       }
-
-      if (response.ok) {
-        const count = Number(data?.count ?? 0);
-
-        setCartCount(count);
-
-        console.log("Cart Count:", count);
-      }
-    } catch (error) {
-      console.log("CART COUNT ERROR:", error);
-    }
-  }, []);
+    }, [getHeaders]);
 
   // ============================================================
   // REFRESH CART
   // ============================================================
 
-  const refreshCart = useCallback(async () => {
-    setRefreshing(true);
+  const refreshCart =
+    useCallback(async () => {
+      setRefreshing(true);
 
-    try {
-      await Promise.all([
-        fetchCart(false),
-        fetchCartCount(),
-      ]);
-    } catch (error) {
-      console.log("REFRESH CART ERROR:", error);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [fetchCart, fetchCartCount]);
+      try {
+        await Promise.all([
+          fetchCart(false),
+          fetchCartCount(),
+        ]);
+      } catch (error) {
+        console.log(
+          "REFRESH CART ERROR:",
+          error
+        );
+      } finally {
+        setRefreshing(false);
+      }
+    }, [
+      fetchCart,
+      fetchCartCount,
+    ]);
 
   // ============================================================
   // EXPOSE REFRESH CART TO MAIN NAVIGATION
@@ -268,7 +750,10 @@ const CartScreen = forwardRef((props, ref) => {
   useEffect(() => {
     fetchCart();
     fetchCartCount();
-  }, [fetchCart, fetchCartCount]);
+  }, [
+    fetchCart,
+    fetchCartCount,
+  ]);
 
   // ============================================================
   // CLEAR CART
@@ -290,7 +775,8 @@ const CartScreen = forwardRef((props, ref) => {
         {
           text: "Clear",
           style: "destructive",
-          onPress: performClearCart,
+          onPress:
+            performClearCart,
         },
       ]
     );
@@ -300,66 +786,92 @@ const CartScreen = forwardRef((props, ref) => {
   // PERFORM CLEAR CART
   // ============================================================
 
-  const performClearCart = async () => {
-    try {
-      setIsClearing(true);
-
-      const headers = await getHeaders();
-
-      const response = await fetch(
-        `${BASE_URL}/api/v1/cart`,
-        {
-          method: "DELETE",
-          headers,
-        }
-      );
-
-      const responseText = await response.text();
-
-      let data = {};
-
+  const performClearCart =
+    async () => {
       try {
-        data = responseText ? JSON.parse(responseText) : {};
+        setIsClearing(true);
+
+        const headers =
+          await getHeaders();
+
+        const response =
+          await fetch(
+            `${BASE_URL}/api/v1/cart`,
+            {
+              method: "DELETE",
+              headers,
+            }
+          );
+
+        const responseText =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch (error) {
+          console.log(
+            "CLEAR CART JSON ERROR:",
+            error
+          );
+        }
+
+        if (response.ok) {
+          setCartItems([]);
+          setCartCount(0);
+          setGrandTotal(0);
+          setDeliveryFee(0);
+          setFinalTotal(0);
+
+          Alert.alert(
+            "Success",
+            "Cart cleared successfully"
+          );
+        } else if (
+          response.status === 401
+        ) {
+          Alert.alert(
+            "Session Expired",
+            "Please login again."
+          );
+
+          router.replace(
+            "/Login_screen"
+          );
+        } else {
+          Alert.alert(
+            "Error",
+            data?.detail ||
+              data?.message ||
+              `Failed to clear cart (${response.status})`
+          );
+        }
       } catch (error) {
-        console.log("CLEAR CART JSON ERROR:", error);
-      }
-
-      if (response.ok) {
-        setCartItems([]);
-        setCartCount(0);
-        setGrandTotal(0);
-        setDeliveryFee(0);
-        setFinalTotal(0);
-
-        Alert.alert(
-          "Success",
-          "Cart cleared successfully"
+        console.log(
+          "CLEAR CART ERROR:",
+          error
         );
-      } else {
+
         Alert.alert(
           "Error",
-          data?.detail ||
-            data?.message ||
-            `Failed to clear cart (${response.status})`
+          error?.message ||
+            "Unable to clear cart."
         );
+      } finally {
+        setIsClearing(false);
       }
-    } catch (error) {
-      console.log("CLEAR CART ERROR:", error);
-
-      Alert.alert(
-        "Error",
-        error?.message || "Unable to clear cart."
-      );
-    } finally {
-      setIsClearing(false);
-    }
-  };
+    };
 
   // ============================================================
   // REMOVE CART ITEM
   // ============================================================
 
-  const removeCartItem = (cartId) => {
+  const removeCartItem = (
+    cartId
+  ) => {
     Alert.alert(
       "Remove Item",
       "Do you want to remove this item from your cart?",
@@ -372,7 +884,9 @@ const CartScreen = forwardRef((props, ref) => {
           text: "Remove",
           style: "destructive",
           onPress: () =>
-            performRemoveCartItem(cartId),
+            performRemoveCartItem(
+              cartId
+            ),
         },
       ]
     );
@@ -382,157 +896,203 @@ const CartScreen = forwardRef((props, ref) => {
   // PERFORM REMOVE
   // ============================================================
 
-  const performRemoveCartItem = async (cartId) => {
-    try {
-      setRemovingId(cartId);
-
-      const headers = await getHeaders();
-
-      const response = await fetch(
-        `${BASE_URL}/api/v1/cart/${cartId}`,
-        {
-          method: "DELETE",
-          headers,
-        }
-      );
-
-      const responseText = await response.text();
-
-      let data = {};
-
+  const performRemoveCartItem =
+    async (cartId) => {
       try {
-        data = responseText ? JSON.parse(responseText) : {};
+        setRemovingId(cartId);
+
+        const headers =
+          await getHeaders();
+
+        const response =
+          await fetch(
+            `${BASE_URL}/api/v1/cart/${cartId}`,
+            {
+              method: "DELETE",
+              headers,
+            }
+          );
+
+        const responseText =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch (error) {
+          console.log(
+            "REMOVE JSON ERROR:",
+            error
+          );
+        }
+
+        if (response.ok) {
+          await Promise.all([
+            fetchCart(false),
+            fetchCartCount(),
+          ]);
+
+          Alert.alert(
+            "Success",
+            "Item removed from cart"
+          );
+        } else if (
+          response.status === 401
+        ) {
+          Alert.alert(
+            "Session Expired",
+            "Please login again.",
+            [
+              {
+                text: "OK",
+                onPress: () =>
+                  router.replace(
+                    "/Login_screen"
+                  ),
+              },
+            ]
+          );
+        } else {
+          Alert.alert(
+            "Error",
+            data?.detail ||
+              data?.message ||
+              `Failed to remove item (${response.status})`
+          );
+        }
       } catch (error) {
-        console.log("REMOVE JSON ERROR:", error);
-      }
-
-      if (response.ok) {
-        await Promise.all([
-          fetchCart(false),
-          fetchCartCount(),
-        ]);
-
-        Alert.alert(
-          "Success",
-          "Item removed from cart"
+        console.log(
+          "REMOVE CART ERROR:",
+          error
         );
-      } else {
+
         Alert.alert(
           "Error",
-          data?.detail ||
-            data?.message ||
-            `Failed to remove item (${response.status})`
+          error?.message ||
+            "Unable to remove item."
         );
+      } finally {
+        setRemovingId(null);
       }
-    } catch (error) {
-      console.log("REMOVE CART ERROR:", error);
-
-      Alert.alert(
-        "Error",
-        error?.message || "Unable to remove item."
-      );
-    } finally {
-      setRemovingId(null);
-    }
-  };
+    };
 
   // ============================================================
   // UPDATE QUANTITY
   // ============================================================
 
-  const updateCartQuantity = async (
-    cartId,
-    quantity
-  ) => {
-    if (quantity < 1) {
-      return;
-    }
-
-    try {
-      setUpdatingId(cartId);
-
-      const headers = await getHeaders();
-
-      const response = await fetch(
-        `${BASE_URL}/api/v1/cart/${cartId}`,
-        {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify({
-            quantity,
-          }),
-        }
-      );
-
-      const responseText = await response.text();
-
-      let data = {};
+  const updateCartQuantity =
+    async (
+      cartId,
+      quantity
+    ) => {
+      if (quantity < 1) {
+        return;
+      }
 
       try {
-        data = responseText ? JSON.parse(responseText) : {};
-      } catch (error) {
-        console.log("UPDATE JSON ERROR:", error);
-      }
+        setUpdatingId(cartId);
 
-      if (response.ok) {
-        await Promise.all([
-          fetchCart(false),
-          fetchCartCount(),
-        ]);
-      } else {
+        const headers =
+          await getHeaders();
+
+        const response =
+          await fetch(
+            `${BASE_URL}/api/v1/cart/${cartId}`,
+            {
+              method: "PATCH",
+              headers,
+              body: JSON.stringify({
+                quantity,
+              }),
+            }
+          );
+
+        const responseText =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch (error) {
+          console.log(
+            "UPDATE JSON ERROR:",
+            error
+          );
+        }
+
+        if (response.ok) {
+          await Promise.all([
+            fetchCart(false),
+            fetchCartCount(),
+          ]);
+        } else if (
+          response.status === 401
+        ) {
+          Alert.alert(
+            "Session Expired",
+            "Please login again.",
+            [
+              {
+                text: "OK",
+                onPress: () =>
+                  router.replace(
+                    "/Login_screen"
+                  ),
+              },
+            ]
+          );
+        } else {
+          Alert.alert(
+            "Error",
+            data?.detail ||
+              data?.message ||
+              `Failed to update cart (${response.status})`
+          );
+        }
+      } catch (error) {
+        console.log(
+          "UPDATE CART ERROR:",
+          error
+        );
+
         Alert.alert(
           "Error",
-          data?.detail ||
-            data?.message ||
-            `Failed to update cart (${response.status})`
+          error?.message ||
+            "Unable to update quantity."
         );
+      } finally {
+        setUpdatingId(null);
       }
-    } catch (error) {
-      console.log("UPDATE CART ERROR:", error);
-
-      Alert.alert(
-        "Error",
-        error?.message ||
-          "Unable to update quantity."
-      );
-    } finally {
-      setUpdatingId(null);
-    }
-  };
+    };
 
   // ============================================================
   // FORMAT PRICE
   // ============================================================
 
-  const formatPrice = (value) => {
-    const number = Number(value) || 0;
+  const formatPrice = (
+    value
+  ) => {
+    const number =
+      Number(value) || 0;
+
     return `₹${number.toFixed(2)}`;
   };
 
   // ============================================================
-  // IMAGE URL
+  // RENDER FOOD IMAGE
   // ============================================================
 
-  const getImageUrl = (item) => {
-    const image =
-      item?.food_photo ||
-      item?.food_image ||
-      item?.image ||
-      item?.food?.image ||
-      item?.food?.food_photo ||
-      "";
-
-    return typeof image === "string"
-      ? image
-      : "";
-  };
-
-  // ============================================================
-  // IMAGE
-  // ============================================================
-
-  const renderFoodImage = (item) => {
-    const imageUrl = getImageUrl(item);
+  const renderFoodImage = (
+    item
+  ) => {
+    const imageUrl =
+      getImageUrl(item);
 
     if (!imageUrl) {
       return (
@@ -546,22 +1106,28 @@ const CartScreen = forwardRef((props, ref) => {
             },
           ]}
         >
-          <Text style={styles.placeholderEmoji}>
-            🍴
-          </Text>
+          <Ionicons
+            name="restaurant-outline"
+            size={30}
+            color={colors.muted}
+          />
         </View>
       );
     }
 
     return (
       <Image
-        source={{ uri: imageUrl }}
+        source={{
+          uri: imageUrl,
+        }}
         style={styles.foodImage}
         resizeMode="cover"
         onError={(error) => {
           console.log(
-            "IMAGE ERROR:",
-            error?.nativeEvent?.error
+            "CART IMAGE ERROR:",
+            imageUrl,
+            error?.nativeEvent
+              ?.error
           );
         }}
       />
@@ -572,8 +1138,12 @@ const CartScreen = forwardRef((props, ref) => {
   // CART ITEM
   // ============================================================
 
-  const renderCartItem = ({ item }) => {
-    const cartId = item?.cart_id;
+  const renderCartItem = ({
+    item,
+  }) => {
+    const cartId =
+      item?.cart_id ??
+      item?.id;
 
     const quantity =
       Number(item?.quantity) || 1;
@@ -596,41 +1166,61 @@ const CartScreen = forwardRef((props, ref) => {
         style={[
           styles.cartCard,
           {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
+            backgroundColor:
+              colors.card,
+            borderColor:
+              colors.border,
           },
         ]}
       >
         {renderFoodImage(item)}
 
-        <View style={styles.itemContent}>
+        <View
+          style={styles.itemContent}
+        >
           <Text
             style={[
               styles.foodName,
-              { color: colors.foreground },
+              {
+                color:
+                  colors.foreground,
+              },
             ]}
             numberOfLines={2}
           >
-            {item?.food_name || "Food Item"}
+            {item?.food_name ||
+              item?.name ||
+              "Food Item"}
           </Text>
 
           <Text
             style={[
               styles.foodPrice,
-              { color: colors.orange },
+              {
+                color:
+                  colors.orange,
+              },
             ]}
           >
             {formatPrice(price)}
           </Text>
 
-          <View style={styles.quantityContainer}>
+          <View
+            style={
+              styles.quantityContainer
+            }
+          >
             <TouchableOpacity
               style={[
                 styles.quantityButton,
-                { borderColor: colors.border },
+                {
+                  borderColor:
+                    colors.border,
+                },
               ]}
               disabled={
-                isUpdating || quantity <= 1
+                isUpdating ||
+                quantity <= 1
               }
               onPress={() =>
                 updateCartQuantity(
@@ -657,14 +1247,21 @@ const CartScreen = forwardRef((props, ref) => {
             {isUpdating ? (
               <ActivityIndicator
                 size="small"
-                style={styles.quantityLoader}
-                color={colors.orange}
+                style={
+                  styles.quantityLoader
+                }
+                color={
+                  colors.orange
+                }
               />
             ) : (
               <Text
                 style={[
                   styles.quantityText,
-                  { color: colors.foreground },
+                  {
+                    color:
+                      colors.foreground,
+                  },
                 ]}
               >
                 {quantity}
@@ -674,7 +1271,10 @@ const CartScreen = forwardRef((props, ref) => {
             <TouchableOpacity
               style={[
                 styles.quantityButton,
-                { borderColor: colors.border },
+                {
+                  borderColor:
+                    colors.border,
+                },
               ]}
               disabled={isUpdating}
               onPress={() =>
@@ -687,7 +1287,10 @@ const CartScreen = forwardRef((props, ref) => {
               <Text
                 style={[
                   styles.quantityButtonText,
-                  { color: colors.foreground },
+                  {
+                    color:
+                      colors.foreground,
+                  },
                 ]}
               >
                 +
@@ -696,21 +1299,33 @@ const CartScreen = forwardRef((props, ref) => {
           </View>
         </View>
 
-        <View style={styles.itemRight}>
+        <View
+          style={styles.itemRight}
+        >
           <Text
             style={[
               styles.itemTotal,
-              { color: colors.foreground },
+              {
+                color:
+                  colors.foreground,
+              },
             ]}
           >
-            {formatPrice(itemTotal)}
+            {formatPrice(
+              itemTotal
+            )}
           </Text>
 
           <TouchableOpacity
-            style={styles.deleteButton}
+            style={
+              styles.deleteButton
+            }
             disabled={isRemoving}
+            activeOpacity={0.7}
             onPress={() =>
-              removeCartItem(cartId)
+              removeCartItem(
+                cartId
+              )
             }
           >
             {isRemoving ? (
@@ -719,14 +1334,11 @@ const CartScreen = forwardRef((props, ref) => {
                 color={colors.red}
               />
             ) : (
-              <Text
-                style={[
-                  styles.deleteIcon,
-                  { color: colors.red },
-                ]}
-              >
-                🗑
-              </Text>
+              <Ionicons
+                name="trash"
+                size={22}
+                color={colors.red}
+              />
             )}
           </TouchableOpacity>
         </View>
@@ -738,200 +1350,282 @@ const CartScreen = forwardRef((props, ref) => {
   // EMPTY CART
   // ============================================================
 
-  const renderEmptyCart = () => {
-    if (isLoading) {
+  const renderEmptyCart =
+    () => {
+      if (isLoading) {
+        return (
+          <View
+            style={
+              styles.centerContainer
+            }
+          >
+            <ActivityIndicator
+              size="large"
+              color={
+                colors.orange
+              }
+            />
+
+            <Text
+              style={[
+                styles.loadingText,
+                {
+                  color:
+                    colors.muted,
+                },
+              ]}
+            >
+              Loading cart...
+            </Text>
+          </View>
+        );
+      }
+
       return (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator
-            size="large"
-            color={colors.orange}
-          />
+        <View
+          style={
+            styles.emptyContainer
+          }
+        >
+          <View
+            style={[
+              styles.emptyIconContainer,
+              {
+                backgroundColor:
+                  isDark
+                    ? "#2A2A2A"
+                    : "#FFF2E8",
+              },
+            ]}
+          >
+            <Ionicons
+              name="cart-outline"
+              size={48}
+              color={
+                colors.orange
+              }
+            />
+          </View>
 
           <Text
             style={[
-              styles.loadingText,
-              { color: colors.muted },
+              styles.emptyTitle,
+              {
+                color:
+                  colors.foreground,
+              },
             ]}
           >
-            Loading cart...
+            Your cart is empty
           </Text>
+
+          <Text
+            style={[
+              styles.emptySubtitle,
+              {
+                color:
+                  colors.muted,
+              },
+            ]}
+          >
+            Add some delicious food
+            to your cart
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.shopButton,
+              {
+                backgroundColor:
+                  colors.orange,
+              },
+            ]}
+            activeOpacity={0.85}
+            onPress={() => {
+              router.replace(
+                "/Main_navigation"
+              );
+            }}
+          >
+            <Text
+              style={
+                styles.shopButtonText
+              }
+            >
+              Browse Food
+            </Text>
+          </TouchableOpacity>
         </View>
       );
-    }
-
-    return (
-      <View style={styles.emptyContainer}>
-        <View
-          style={[
-            styles.emptyIconContainer,
-            {
-              backgroundColor: isDark
-                ? "#2A2A2A"
-                : "#FFF2E8",
-            },
-          ]}
-        >
-          <Text style={styles.emptyEmoji}>
-            🛒
-          </Text>
-        </View>
-
-        <Text
-          style={[
-            styles.emptyTitle,
-            { color: colors.foreground },
-          ]}
-        >
-          Your cart is empty
-        </Text>
-
-        <Text
-          style={[
-            styles.emptySubtitle,
-            { color: colors.muted },
-          ]}
-        >
-          Add some delicious food to your cart
-        </Text>
-
-        <TouchableOpacity
-          style={[
-            styles.shopButton,
-            {
-              backgroundColor:
-                colors.orange,
-            },
-          ]}
-          onPress={() => {
-            router.replace("/Main_navigation");
-          }}
-        >
-          <Text style={styles.shopButtonText}>
-            Browse Food
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
+    };
 
   // ============================================================
   // SUMMARY
   // ============================================================
 
-  const renderSummary = () => {
-    if (cartItems.length === 0) {
-      return null;
-    }
+  const renderSummary =
+    () => {
+      if (
+        cartItems.length === 0
+      ) {
+        return null;
+      }
 
-    return (
-      <View
-        style={[
-          styles.summaryContainer,
-          {
-            backgroundColor: colors.card,
-            borderTopColor: colors.border,
-          },
-        ]}
-      >
-        <View style={styles.summaryRow}>
-          <Text
-            style={[
-              styles.summaryLabel,
-              { color: colors.muted },
-            ]}
-          >
-            Subtotal
-          </Text>
-
-          <Text
-            style={[
-              styles.summaryValue,
-              { color: colors.foreground },
-            ]}
-          >
-            {formatPrice(grandTotal)}
-          </Text>
-        </View>
-
-        <View style={styles.summaryRow}>
-          <Text
-            style={[
-              styles.summaryLabel,
-              { color: colors.muted },
-            ]}
-          >
-            Delivery
-          </Text>
-
-          <Text
-            style={[
-              styles.summaryValue,
-              { color: colors.foreground },
-            ]}
-          >
-            {deliveryFee === 0
-              ? "FREE"
-              : formatPrice(deliveryFee)}
-          </Text>
-        </View>
-
+      return (
         <View
           style={[
-            styles.divider,
-            {
-              backgroundColor: colors.border,
-            },
-          ]}
-        />
-
-        <View style={styles.summaryRow}>
-          <Text
-            style={[
-              styles.grandTotalLabel,
-              { color: colors.foreground },
-            ]}
-          >
-            Grand Total
-          </Text>
-
-          <Text
-            style={[
-              styles.grandTotalValue,
-              { color: colors.orange },
-            ]}
-          >
-            {formatPrice(finalTotal)}
-          </Text>
-        </View>
-
-        {/* ======================================================
-            PROCEED TO CHECKOUT
-        ====================================================== */}
-
-        <TouchableOpacity
-          style={[
-            styles.checkoutButton,
+            styles.summaryContainer,
             {
               backgroundColor:
-                colors.orange,
+                colors.card,
+              borderTopColor:
+                colors.border,
             },
           ]}
-          activeOpacity={0.85}
-          onPress={() => {
-            router.push("/Checkout_screen");
-          }}
         >
-          <Text style={styles.checkoutButtonText}>
-            Proceed to Checkout
-          </Text>
+          <View
+            style={
+              styles.summaryRow
+            }
+          >
+            <Text
+              style={[
+                styles.summaryLabel,
+                {
+                  color:
+                    colors.muted,
+                },
+              ]}
+            >
+              Subtotal
+            </Text>
 
-          <Text style={styles.checkoutArrow}>
-            →
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
+            <Text
+              style={[
+                styles.summaryValue,
+                {
+                  color:
+                    colors.foreground,
+                },
+              ]}
+            >
+              {formatPrice(
+                grandTotal
+              )}
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.summaryRow
+            }
+          >
+            <Text
+              style={[
+                styles.summaryLabel,
+                {
+                  color:
+                    colors.muted,
+                },
+              ]}
+            >
+              Delivery
+            </Text>
+
+            <Text
+              style={[
+                styles.summaryValue,
+                {
+                  color:
+                    colors.foreground,
+                },
+              ]}
+            >
+              {deliveryFee === 0
+                ? "FREE"
+                : formatPrice(
+                    deliveryFee
+                  )}
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.divider,
+              {
+                backgroundColor:
+                  colors.border,
+              },
+            ]}
+          />
+
+          <View
+            style={
+              styles.summaryRow
+            }
+          >
+            <Text
+              style={[
+                styles.grandTotalLabel,
+                {
+                  color:
+                    colors.foreground,
+                },
+              ]}
+            >
+              Grand Total
+            </Text>
+
+            <Text
+              style={[
+                styles.grandTotalValue,
+                {
+                  color:
+                    colors.orange,
+                },
+              ]}
+            >
+              {formatPrice(
+                finalTotal
+              )}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.checkoutButton,
+              {
+                backgroundColor:
+                  colors.orange,
+              },
+            ]}
+            activeOpacity={0.85}
+            onPress={() => {
+              router.push(
+                "/Checkout_screen"
+              );
+            }}
+          >
+            <Text
+              style={
+                styles.checkoutButtonText
+              }
+            >
+              Proceed to Checkout
+            </Text>
+
+            <Ionicons
+              name="arrow-forward"
+              size={21}
+              color="#FFFFFF"
+              style={
+                styles.checkoutArrow
+              }
+            />
+          </TouchableOpacity>
+        </View>
+      );
+    };
 
   // ============================================================
   // MAIN UI
@@ -946,7 +1640,12 @@ const CartScreen = forwardRef((props, ref) => {
             colors.background,
         },
       ]}
-      edges={["top", "left", "right", "bottom"]}
+      edges={[
+        "top",
+        "left",
+        "right",
+        "bottom",
+      ]}
     >
       <StatusBar
         barStyle={
@@ -959,7 +1658,9 @@ const CartScreen = forwardRef((props, ref) => {
         }
       />
 
-      {/* HEADER */}
+      {/* ========================================================
+          HEADER
+      ======================================================== */}
 
       <View
         style={[
@@ -973,7 +1674,9 @@ const CartScreen = forwardRef((props, ref) => {
         ]}
       >
         <View
-          style={styles.headerTitleContainer}
+          style={
+            styles.headerTitleContainer
+          }
         >
           <Text
             style={[
@@ -997,65 +1700,94 @@ const CartScreen = forwardRef((props, ref) => {
                 },
               ]}
             >
-              <Text style={styles.countBadgeText}>
+              <Text
+                style={
+                  styles.countBadgeText
+                }
+              >
                 {cartCount}
               </Text>
             </View>
           )}
         </View>
 
+        {/* RED TRASH / BUCKET BUTTON */}
+
         {cartItems.length > 0 && (
           <TouchableOpacity
-            style={styles.clearButton}
+            style={
+              styles.clearButton
+            }
             disabled={isClearing}
+            activeOpacity={0.7}
             onPress={clearCart}
           >
             {isClearing ? (
               <ActivityIndicator
                 size="small"
-                color={colors.red}
+                color={
+                  colors.red
+                }
               />
             ) : (
-              <Text
-                style={[
-                  styles.clearIcon,
-                  { color: colors.red },
-                ]}
-              >
-                🗑
-              </Text>
+              <Ionicons
+                name="trash"
+                size={23}
+                color={
+                  colors.red
+                }
+              />
             )}
           </TouchableOpacity>
         )}
       </View>
 
-      {/* BODY */}
+      {/* ========================================================
+          BODY
+      ======================================================== */}
 
       {cartItems.length === 0 &&
       !isLoading ? (
         renderEmptyCart()
       ) : (
-        <View style={styles.body}>
+        <View
+          style={styles.body}
+        >
           <FlatList
             data={cartItems}
-            keyExtractor={(item, index) =>
+            keyExtractor={(
+              item,
+              index
+            ) =>
               String(
                 item?.cart_id ??
                   item?.id ??
                   index
               )
             }
-            renderItem={renderCartItem}
+            renderItem={
+              renderCartItem
+            }
             contentContainerStyle={
               styles.listContent
             }
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator={
+              false
+            }
             refreshControl={
               <RefreshControl
-                refreshing={refreshing}
-                onRefresh={refreshCart}
-                tintColor={colors.orange}
-                colors={[colors.orange]}
+                refreshing={
+                  refreshing
+                }
+                onRefresh={
+                  refreshCart
+                }
+                tintColor={
+                  colors.orange
+                }
+                colors={[
+                  colors.orange,
+                ]}
               />
             }
           />
@@ -1119,10 +1851,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  clearIcon: {
-    fontSize: 20,
-  },
-
   body: {
     flex: 1,
   },
@@ -1168,10 +1896,6 @@ const styles = StyleSheet.create({
   imagePlaceholder: {
     alignItems: "center",
     justifyContent: "center",
-  },
-
-  placeholderEmoji: {
-    fontSize: 28,
   },
 
   itemContent: {
@@ -1238,14 +1962,10 @@ const styles = StyleSheet.create({
   },
 
   deleteButton: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
-  },
-
-  deleteIcon: {
-    fontSize: 18,
   },
 
   summaryContainer: {
@@ -1274,7 +1994,8 @@ const styles = StyleSheet.create({
 
   summaryRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent:
+      "space-between",
     alignItems: "center",
     marginBottom: 10,
   },
@@ -1320,10 +2041,7 @@ const styles = StyleSheet.create({
   },
 
   checkoutArrow: {
-    color: "#FFFFFF",
-    fontSize: 22,
     marginLeft: 10,
-    marginTop: -2,
   },
 
   centerContainer: {
@@ -1351,10 +2069,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 18,
-  },
-
-  emptyEmoji: {
-    fontSize: 42,
   },
 
   emptyTitle: {

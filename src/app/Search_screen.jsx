@@ -1,21 +1,23 @@
 import { useEffect, useRef, useState } from "react";
+
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Keyboard,
-    RefreshControl,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    useColorScheme,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Keyboard,
+  RefreshControl,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useColorScheme,
+  View,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 
 const BASE_URL = "https://api.homecookt.com";
 
@@ -23,7 +25,7 @@ const BASE_URL = "https://api.homecookt.com";
 // SEARCH SCREEN
 // ============================================================
 
-const SearchScreen = ({ navigation }) => {
+const SearchScreen = () => {
   const systemScheme = useColorScheme();
   const isDark = systemScheme === "dark";
 
@@ -32,7 +34,6 @@ const SearchScreen = ({ navigation }) => {
   // ============================================================
 
   const [query, setQuery] = useState("");
-
   const [searchResults, setSearchResults] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
 
@@ -42,10 +43,20 @@ const SearchScreen = ({ navigation }) => {
 
   const [refreshing, setRefreshing] = useState(false);
 
+  const [showSuggestions, setShowSuggestions] =
+    useState(true);
+
+  // ============================================================
+  // REFS
+  // ============================================================
+
   const searchInputRef = useRef(null);
 
   const searchTimeoutRef = useRef(null);
   const suggestionTimeoutRef = useRef(null);
+
+  const searchRequestIdRef = useRef(0);
+  const suggestionRequestIdRef = useRef(0);
 
   // ============================================================
   // COLORS
@@ -56,12 +67,17 @@ const SearchScreen = ({ navigation }) => {
     card: isDark ? "#1E1E1E" : "#FFFFFF",
     input: isDark ? "#202020" : "#FFFFFF",
     border: isDark ? "#333333" : "#E6E6E6",
+
     text: isDark ? "#FFFFFF" : "#111111",
     secondaryText: isDark ? "#BDBDBD" : "#666666",
     muted: isDark ? "#8D8D8D" : "#888888",
+
     orange: "#F28C28",
     gold: "#F5B83D",
-    iconBackground: isDark ? "#242424" : "#EEEEF0",
+
+    iconBackground: isDark
+      ? "#242424"
+      : "#EEEEF0",
   };
 
   // ============================================================
@@ -70,11 +86,30 @@ const SearchScreen = ({ navigation }) => {
 
   const getToken = async () => {
     try {
-      return (
-        (await AsyncStorage.getItem("access_token")) || ""
-      );
+      const accessToken =
+        await AsyncStorage.getItem("access_token");
+
+      if (accessToken) {
+        return accessToken;
+      }
+
+      const accessToken2 =
+        await AsyncStorage.getItem("accessToken");
+
+      if (accessToken2) {
+        return accessToken2;
+      }
+
+      const token =
+        await AsyncStorage.getItem("token");
+
+      if (token) {
+        return token;
+      }
+
+      return "";
     } catch (error) {
-      console.log("Token error:", error);
+      console.log("GET TOKEN ERROR =>", error);
       return "";
     }
   };
@@ -86,6 +121,15 @@ const SearchScreen = ({ navigation }) => {
   const getImageUrl = (image) => {
     if (!image) {
       return null;
+    }
+
+    // Handle arrays such as image_urls
+    if (Array.isArray(image)) {
+      if (image.length === 0) {
+        return null;
+      }
+
+      image = image[0];
     }
 
     const imageString = String(image).trim();
@@ -109,17 +153,107 @@ const SearchScreen = ({ navigation }) => {
   };
 
   // ============================================================
+  // EXTRACT SEARCH RESULTS
+  // ============================================================
+
+  const extractSearchResults = (data) => {
+    console.log(
+      "SEARCH RESPONSE TYPE =>",
+      typeof data
+    );
+
+    console.log(
+      "SEARCH RESPONSE DATA =>",
+      data
+    );
+
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (!data || typeof data !== "object") {
+      return [];
+    }
+
+    // Most likely API format
+    if (Array.isArray(data.results)) {
+      return data.results;
+    }
+
+    if (Array.isArray(data.foods)) {
+      return data.foods;
+    }
+
+    if (Array.isArray(data.data)) {
+      return data.data;
+    }
+
+    if (Array.isArray(data.items)) {
+      return data.items;
+    }
+
+    if (Array.isArray(data.food_items)) {
+      return data.food_items;
+    }
+
+    if (Array.isArray(data.fooditems)) {
+      return data.fooditems;
+    }
+
+    if (Array.isArray(data.search_results)) {
+      return data.search_results;
+    }
+
+    return [];
+  };
+
+  // ============================================================
+  // EXTRACT SUGGESTIONS
+  // ============================================================
+
+  const extractSuggestions = (data) => {
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (!data || typeof data !== "object") {
+      return [];
+    }
+
+    if (Array.isArray(data.suggestions)) {
+      return data.suggestions;
+    }
+
+    if (Array.isArray(data.data)) {
+      return data.data;
+    }
+
+    if (Array.isArray(data.results)) {
+      return data.results;
+    }
+
+    return [];
+  };
+
+  // ============================================================
   // SEARCH FOOD API
   // ============================================================
 
-  const searchFood = async (searchQuery, showLoader = true) => {
-    const trimmedQuery = searchQuery.trim();
+  const searchFood = async (
+    searchQuery,
+    showLoader = true
+  ) => {
+    const trimmedQuery =
+      String(searchQuery || "").trim();
 
     if (!trimmedQuery) {
       setSearchResults([]);
       setIsLoading(false);
       return;
     }
+
+    const requestId =
+      ++searchRequestIdRef.current;
 
     try {
       if (showLoader) {
@@ -132,65 +266,167 @@ const SearchScreen = ({ navigation }) => {
         `${BASE_URL}/api/v1/search?query=` +
         encodeURIComponent(trimmedQuery);
 
-      console.log("====================================");
-      console.log("SEARCH FOOD API");
-      console.log("URL:", url);
-      console.log("====================================");
+      console.log(
+        "===================================="
+      );
+
+      console.log(
+        "SEARCH FOOD API"
+      );
+
+      console.log(
+        "QUERY =>",
+        trimmedQuery
+      );
+
+      console.log(
+        "URL =>",
+        url
+      );
+
+      console.log(
+        "TOKEN EXISTS =>",
+        !!token
+      );
+
+      console.log(
+        "REQUEST ID =>",
+        requestId
+      );
+
+      console.log(
+        "===================================="
+      );
 
       const response = await fetch(url, {
         method: "GET",
+
         headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
           Accept: "application/json",
+
+          "Content-Type":
+            "application/json",
+
+          ...(token
+            ? {
+                Authorization:
+                  `Bearer ${token}`,
+              }
+            : {}),
         },
       });
+
+      const responseText =
+        await response.text();
 
       let data = {};
 
       try {
-        data = await response.json();
+        data = responseText
+          ? JSON.parse(responseText)
+          : {};
       } catch (error) {
+        console.log(
+          "SEARCH JSON PARSE ERROR =>",
+          error
+        );
+
         data = {};
       }
 
-      console.log("SEARCH STATUS:", response.status);
-      console.log("SEARCH RESPONSE:", data);
+      console.log(
+        "SEARCH STATUS =>",
+        response.status
+      );
 
-      if (response.status === 200) {
-        const results =
-          data?.results ??
-          data?.foods ??
-          data?.data ??
-          [];
+      console.log(
+        "SEARCH RESPONSE =>",
+        data
+      );
 
-        setSearchResults(
-          Array.isArray(results) ? results : []
+      // Ignore an old API response.
+      if (
+        requestId !==
+        searchRequestIdRef.current
+      ) {
+        console.log(
+          "OLD SEARCH RESPONSE IGNORED =>",
+          requestId
         );
-      } else {
+
+        return;
+      }
+
+      if (!response.ok) {
+        console.log(
+          "SEARCH API FAILED =>",
+          response.status,
+          responseText
+        );
+
+        setSearchResults([]);
+        return;
+      }
+
+      const results =
+        extractSearchResults(data);
+
+      console.log(
+        "SEARCH RESULTS COUNT =>",
+        results.length
+      );
+
+      console.log(
+        "SEARCH RESULTS =>",
+        results
+      );
+
+      setSearchResults(results);
+
+      // Actual search results should replace suggestions.
+      setSuggestions([]);
+      setShowSuggestions(false);
+    } catch (error) {
+      console.log(
+        "SEARCH FOOD ERROR =>",
+        error
+      );
+
+      if (
+        requestId ===
+        searchRequestIdRef.current
+      ) {
         setSearchResults([]);
       }
-    } catch (error) {
-      console.log("Search food error:", error);
-      setSearchResults([]);
     } finally {
-      if (showLoader) {
+      if (
+        showLoader &&
+        requestId ===
+          searchRequestIdRef.current
+      ) {
         setIsLoading(false);
       }
     }
   };
 
   // ============================================================
-  // GET SEARCH SUGGESTIONS API
+  // SEARCH SUGGESTIONS API
   // ============================================================
 
-  const getSuggestions = async (searchQuery) => {
-    const trimmedQuery = searchQuery.trim();
+  const getSuggestions = async (
+    searchQuery
+  ) => {
+    const trimmedQuery =
+      String(searchQuery || "").trim();
 
     if (!trimmedQuery) {
       setSuggestions([]);
+      setIsSuggestionsLoading(false);
       return;
     }
+
+    const requestId =
+      ++suggestionRequestIdRef.current;
 
     try {
       setIsSuggestionsLoading(true);
@@ -201,54 +437,115 @@ const SearchScreen = ({ navigation }) => {
         `${BASE_URL}/api/v1/search-suggestions?q=` +
         encodeURIComponent(trimmedQuery);
 
-      console.log("====================================");
-      console.log("SEARCH SUGGESTIONS API");
-      console.log("URL:", url);
-      console.log("====================================");
+      console.log(
+        "===================================="
+      );
+
+      console.log(
+        "SEARCH SUGGESTIONS API"
+      );
+
+      console.log(
+        "QUERY =>",
+        trimmedQuery
+      );
+
+      console.log(
+        "URL =>",
+        url
+      );
+
+      console.log(
+        "===================================="
+      );
 
       const response = await fetch(url, {
         method: "GET",
+
         headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
           Accept: "application/json",
+
+          "Content-Type":
+            "application/json",
+
+          ...(token
+            ? {
+                Authorization:
+                  `Bearer ${token}`,
+              }
+            : {}),
         },
       });
+
+      const responseText =
+        await response.text();
 
       let data = {};
 
       try {
-        data = await response.json();
+        data = responseText
+          ? JSON.parse(responseText)
+          : {};
       } catch (error) {
+        console.log(
+          "SUGGESTIONS JSON ERROR =>",
+          error
+        );
+
         data = {};
       }
 
       console.log(
-        "SUGGESTIONS STATUS:",
+        "SUGGESTIONS STATUS =>",
         response.status
       );
 
-      if (response.status === 200) {
-        const result =
-          data?.suggestions ??
-          data?.data ??
-          [];
+      console.log(
+        "SUGGESTIONS RESPONSE =>",
+        data
+      );
 
-        setSuggestions(
-          Array.isArray(result) ? result : []
-        );
-      } else {
-        setSuggestions([]);
+      // Ignore old suggestion responses.
+      if (
+        requestId !==
+        suggestionRequestIdRef.current
+      ) {
+        return;
       }
+
+      if (!response.ok) {
+        setSuggestions([]);
+        return;
+      }
+
+      const result =
+        extractSuggestions(data);
+
+      console.log(
+        "SUGGESTIONS COUNT =>",
+        result.length
+      );
+
+      setSuggestions(result);
     } catch (error) {
       console.log(
-        "Suggestions error:",
+        "SUGGESTIONS ERROR =>",
         error
       );
 
-      setSuggestions([]);
+      if (
+        requestId ===
+        suggestionRequestIdRef.current
+      ) {
+        setSuggestions([]);
+      }
     } finally {
-      setIsSuggestionsLoading(false);
+      if (
+        requestId ===
+        suggestionRequestIdRef.current
+      ) {
+        setIsSuggestionsLoading(false);
+      }
     }
   };
 
@@ -259,9 +556,13 @@ const SearchScreen = ({ navigation }) => {
   const handleSearchChange = (text) => {
     setQuery(text);
 
-    // Clear previous debounce timers
+    setShowSuggestions(true);
+
+    // Clear existing timers.
     if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
+      clearTimeout(
+        searchTimeoutRef.current
+      );
     }
 
     if (suggestionTimeoutRef.current) {
@@ -270,49 +571,102 @@ const SearchScreen = ({ navigation }) => {
       );
     }
 
-    const trimmedText = text.trim();
+    const trimmedText =
+      String(text || "").trim();
 
-    // ----------------------------------------------------------
-    // Empty search
-    // ----------------------------------------------------------
+    // ==========================================================
+    // EMPTY
+    // ==========================================================
 
     if (!trimmedText) {
+      // Invalidate old requests.
+      searchRequestIdRef.current += 1;
+
+      suggestionRequestIdRef.current += 1;
+
       setSuggestions([]);
       setSearchResults([]);
+
       setIsLoading(false);
       setIsSuggestionsLoading(false);
+
       return;
     }
 
-    // ----------------------------------------------------------
-    // Suggestions debounce
-    // ----------------------------------------------------------
+    // ==========================================================
+    // SUGGESTIONS
+    // ==========================================================
 
     suggestionTimeoutRef.current =
       setTimeout(() => {
         getSuggestions(trimmedText);
       }, 250);
 
-    // ----------------------------------------------------------
-    // Search debounce
-    // ----------------------------------------------------------
+    // ==========================================================
+    // SEARCH
+    // ==========================================================
 
     searchTimeoutRef.current =
       setTimeout(() => {
-        searchFood(trimmedText);
+        searchFood(trimmedText, true);
       }, 450);
+  };
+
+  // ============================================================
+  // KEYBOARD SEARCH
+  // ============================================================
+
+  const handleSubmitSearch = () => {
+    const trimmedQuery =
+      query.trim();
+
+    if (!trimmedQuery) {
+      return;
+    }
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(
+        searchTimeoutRef.current
+      );
+    }
+
+    if (suggestionTimeoutRef.current) {
+      clearTimeout(
+        suggestionTimeoutRef.current
+      );
+    }
+
+    setSuggestions([]);
+    setShowSuggestions(false);
+
+    Keyboard.dismiss();
+
+    searchFood(trimmedQuery, true);
   };
 
   // ============================================================
   // SELECT SUGGESTION
   // ============================================================
 
-  const selectSuggestion = (suggestion) => {
-    const selected = String(suggestion);
+  const selectSuggestion = (
+    suggestion
+  ) => {
+    const selected =
+      String(suggestion || "").trim();
 
-    // Clear timers
+    if (!selected) {
+      return;
+    }
+
+    console.log(
+      "SELECTED SUGGESTION =>",
+      selected
+    );
+
     if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
+      clearTimeout(
+        searchTimeoutRef.current
+      );
     }
 
     if (suggestionTimeoutRef.current) {
@@ -322,11 +676,14 @@ const SearchScreen = ({ navigation }) => {
     }
 
     setQuery(selected);
+
     setSuggestions([]);
+
+    setShowSuggestions(false);
 
     Keyboard.dismiss();
 
-    searchFood(selected);
+    searchFood(selected, true);
   };
 
   // ============================================================
@@ -335,7 +692,9 @@ const SearchScreen = ({ navigation }) => {
 
   const clearSearch = () => {
     if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
+      clearTimeout(
+        searchTimeoutRef.current
+      );
     }
 
     if (suggestionTimeoutRef.current) {
@@ -344,12 +703,23 @@ const SearchScreen = ({ navigation }) => {
       );
     }
 
+    // Invalidate old API calls.
+    searchRequestIdRef.current += 1;
+
+    suggestionRequestIdRef.current += 1;
+
     setQuery("");
     setSuggestions([]);
     setSearchResults([]);
-    setIsLoading(false);
 
-    searchInputRef.current?.focus();
+    setIsLoading(false);
+    setIsSuggestionsLoading(false);
+
+    setShowSuggestions(true);
+
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
   };
 
   // ============================================================
@@ -357,45 +727,72 @@ const SearchScreen = ({ navigation }) => {
   // ============================================================
 
   const onRefresh = async () => {
-    if (!query.trim()) {
+    const trimmedQuery =
+      query.trim();
+
+    if (!trimmedQuery) {
       return;
     }
 
     try {
       setRefreshing(true);
 
-      await searchFood(query, false);
+      await searchFood(
+        trimmedQuery,
+        false
+      );
     } finally {
       setRefreshing(false);
     }
   };
 
   // ============================================================
-  // NAVIGATE TO DISH DETAIL
+  // OPEN DISH DETAIL
   // ============================================================
 
   const openDish = (item) => {
-    /*
-      Your Flutter code does:
+    console.log(
+      "===================================="
+    );
 
-      final dish = Dish.fromJson(item);
+    console.log(
+      "OPEN DISH"
+    );
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => DishDetailScreen(
-            dish: dish,
-          ),
-        ),
+    console.log(
+      "DISH OBJECT =>",
+      item
+    );
+
+    console.log(
+      "===================================="
+    );
+
+    try {
+      // IMPORTANT:
+      // This app uses Expo Router.
+      // Do NOT use navigation.navigate().
+      //
+      // Your screen file is:
+      // src/app/Dish_detail_screen.jsx
+      //
+      // Expo Router route:
+      // /Dish_detail_screen
+
+      router.push({
+        pathname:
+          "/Dish_detail_screen",
+
+        params: {
+          dish: JSON.stringify(item),
+        },
+      });
+    } catch (error) {
+      console.log(
+        "DISH NAVIGATION ERROR =>",
+        error
       );
-
-      Here we pass the complete API object.
-      Your DishDetailScreen can read route.params.dish.
-    */
-
-    navigation.navigate("DishDetail", {
-      dish: item,
-    });
+    }
   };
 
   // ============================================================
@@ -405,7 +802,9 @@ const SearchScreen = ({ navigation }) => {
   useEffect(() => {
     return () => {
       if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
+        clearTimeout(
+          searchTimeoutRef.current
+        );
       }
 
       if (suggestionTimeoutRef.current) {
@@ -413,6 +812,10 @@ const SearchScreen = ({ navigation }) => {
           suggestionTimeoutRef.current
         );
       }
+
+      searchRequestIdRef.current += 1;
+
+      suggestionRequestIdRef.current += 1;
     };
   }, []);
 
@@ -430,8 +833,11 @@ const SearchScreen = ({ navigation }) => {
         style={[
           styles.suggestionItem,
           {
-            backgroundColor: colors.card,
-            borderBottomColor: colors.border,
+            backgroundColor:
+              colors.card,
+
+            borderBottomColor:
+              colors.border,
           },
         ]}
         onPress={() =>
@@ -471,7 +877,11 @@ const SearchScreen = ({ navigation }) => {
           size={18}
           color={colors.muted}
           style={{
-            transform: [{ rotate: "45deg" }],
+            transform: [
+              {
+                rotate: "45deg",
+              },
+            ],
           }}
         />
       </TouchableOpacity>
@@ -479,15 +889,24 @@ const SearchScreen = ({ navigation }) => {
   };
 
   // ============================================================
-  // RENDER FOOD CARD
+  // RENDER FOOD
   // ============================================================
 
-  const renderFood = ({ item, index }) => {
-    const imageUrl = getImageUrl(
-      item?.image ??
-        item?.food_image ??
-        item?.food_photo
-    );
+  const renderFood = ({
+    item,
+    index,
+  }) => {
+    const imageUrl =
+      getImageUrl(
+        item?.image ??
+          item?.image_url ??
+          item?.imageUrl ??
+          item?.image_urls ??
+          item?.food_image ??
+          item?.food_photo ??
+          item?.food_image_url ??
+          item?.photo
+      );
 
     const name =
       item?.name ??
@@ -499,7 +918,13 @@ const SearchScreen = ({ navigation }) => {
       item?.price ??
       item?.food_price ??
       item?.amount ??
+      item?.selling_price ??
       0;
+
+    const category =
+      item?.category ??
+      item?.food_category ??
+      "";
 
     return (
       <TouchableOpacity
@@ -507,24 +932,39 @@ const SearchScreen = ({ navigation }) => {
         style={[
           styles.foodCard,
           {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
+            backgroundColor:
+              colors.card,
+
+            borderColor:
+              colors.border,
           },
         ]}
-        onPress={() => openDish(item)}
+        onPress={() =>
+          openDish(item)
+        }
       >
         {/* ================================================= */}
         {/* IMAGE */}
         {/* ================================================= */}
 
-        <View style={styles.imageContainer}>
+        <View
+          style={styles.imageContainer}
+        >
           {imageUrl ? (
             <Image
               source={{
                 uri: imageUrl,
               }}
-              style={styles.foodImage}
+              style={
+                styles.foodImage
+              }
               resizeMode="cover"
+              onError={(error) => {
+                console.log(
+                  "FOOD IMAGE ERROR =>",
+                  error?.nativeEvent
+                );
+              }}
             />
           ) : (
             <View
@@ -549,7 +989,9 @@ const SearchScreen = ({ navigation }) => {
         {/* INFO */}
         {/* ================================================= */}
 
-        <View style={styles.foodInfo}>
+        <View
+          style={styles.foodInfo}
+        >
           <Text
             style={[
               styles.foodName,
@@ -559,19 +1001,35 @@ const SearchScreen = ({ navigation }) => {
             ]}
             numberOfLines={2}
           >
-            {name}
+            {String(name)}
           </Text>
 
           <Text
             style={[
               styles.foodPrice,
               {
-                color: colors.orange,
+                color:
+                  colors.orange,
               },
             ]}
           >
-            ₹{price}
+            ₹{String(price)}
           </Text>
+
+          {category ? (
+            <Text
+              style={[
+                styles.foodCategory,
+                {
+                  color:
+                    colors.muted,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {String(category)}
+            </Text>
+          ) : null}
         </View>
 
         {/* ================================================= */}
@@ -590,7 +1048,9 @@ const SearchScreen = ({ navigation }) => {
           <Ionicons
             name="chevron-forward"
             size={18}
-            color={colors.secondaryText}
+            color={
+              colors.secondaryText
+            }
           />
         </View>
       </TouchableOpacity>
@@ -606,8 +1066,14 @@ const SearchScreen = ({ navigation }) => {
       query.trim().length > 0;
 
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyEmoji}>
+      <View
+        style={
+          styles.emptyContainer
+        }
+      >
+        <Text
+          style={styles.emptyEmoji}
+        >
           🔍
         </Text>
 
@@ -629,12 +1095,13 @@ const SearchScreen = ({ navigation }) => {
             style={[
               styles.emptySubtitle,
               {
-                color: colors.muted,
+                color:
+                  colors.muted,
               },
             ]}
           >
-            Try searching for another dish,
-            chef, or cuisine
+            Try searching for another
+            dish, chef, or cuisine
           </Text>
         ) : null}
       </View>
@@ -670,14 +1137,18 @@ const SearchScreen = ({ navigation }) => {
       {/* HEADER */}
       {/* ====================================================== */}
 
-      <View style={styles.header}>
+      <View
+        style={styles.header}
+      >
         {/* BACK BUTTON */}
 
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => {
             Keyboard.dismiss();
-            navigation.goBack();
+
+            // Expo Router navigation
+            router.back();
           }}
           style={[
             styles.backButton,
@@ -704,6 +1175,7 @@ const SearchScreen = ({ navigation }) => {
             {
               backgroundColor:
                 colors.input,
+
               borderColor:
                 colors.border,
             },
@@ -713,15 +1185,20 @@ const SearchScreen = ({ navigation }) => {
             name="search"
             size={21}
             color={colors.orange}
-            style={styles.searchIcon}
+            style={
+              styles.searchIcon
+            }
           />
 
           <TextInput
-            ref={searchInputRef}
+            ref={
+              searchInputRef
+            }
             style={[
               styles.searchInput,
               {
-                color: colors.text,
+                color:
+                  colors.text,
               },
             ]}
             value={query}
@@ -734,22 +1211,31 @@ const SearchScreen = ({ navigation }) => {
             }
             autoFocus={true}
             returnKeyType="search"
+            onSubmitEditing={
+              handleSubmitSearch
+            }
             autoCorrect={false}
             autoCapitalize="none"
           />
 
-          {/* CLEAR BUTTON */}
+          {/* CLEAR */}
 
           {query.length > 0 ? (
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={clearSearch}
-              style={styles.clearButton}
+              onPress={
+                clearSearch
+              }
+              style={
+                styles.clearButton
+              }
             >
               <Ionicons
                 name="close"
                 size={18}
-                color={colors.secondaryText}
+                color={
+                  colors.secondaryText
+                }
               />
             </TouchableOpacity>
           ) : null}
@@ -761,17 +1247,24 @@ const SearchScreen = ({ navigation }) => {
       {/* ====================================================== */}
 
       {isLoading ? (
-        <View style={styles.loadingContainer}>
+        <View
+          style={
+            styles.loadingContainer
+          }
+        >
           <ActivityIndicator
             size="large"
-            color={colors.orange}
+            color={
+              colors.orange
+            }
           />
 
           <Text
             style={[
               styles.loadingText,
               {
-                color: colors.secondaryText,
+                color:
+                  colors.secondaryText,
               },
             ]}
           >
@@ -780,14 +1273,18 @@ const SearchScreen = ({ navigation }) => {
         </View>
       ) : query.trim().length === 0 ? (
         renderEmptyState()
-      ) : suggestions.length > 0 ? (
+      ) : showSuggestions &&
+        suggestions.length > 0 ? (
         /* ==================================================== */
         /* SUGGESTIONS */
         /* ==================================================== */
 
         <FlatList
           data={suggestions}
-          keyExtractor={(item, index) =>
+          keyExtractor={(
+            item,
+            index
+          ) =>
             `${String(item)}-${index}`
           }
           renderItem={
@@ -821,7 +1318,9 @@ const SearchScreen = ({ navigation }) => {
               {isSuggestionsLoading ? (
                 <ActivityIndicator
                   size="small"
-                  color={colors.orange}
+                  color={
+                    colors.orange
+                  }
                 />
               ) : null}
             </View>
@@ -839,8 +1338,13 @@ const SearchScreen = ({ navigation }) => {
         /* ==================================================== */
 
         <FlatList
-          data={searchResults}
-          keyExtractor={(item, index) =>
+          data={
+            searchResults
+          }
+          keyExtractor={(
+            item,
+            index
+          ) =>
             String(
               item?.id ??
                 item?.food_id ??
@@ -848,7 +1352,9 @@ const SearchScreen = ({ navigation }) => {
                 index
             )
           }
-          renderItem={renderFood}
+          renderItem={
+            renderFood
+          }
           showsVerticalScrollIndicator={
             false
           }
@@ -858,21 +1364,32 @@ const SearchScreen = ({ navigation }) => {
           }
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.orange}
-              colors={[colors.orange]}
+              refreshing={
+                refreshing
+              }
+              onRefresh={
+                onRefresh
+              }
+              tintColor={
+                colors.orange
+              }
+              colors={[
+                colors.orange,
+              ]}
             />
           }
           ListHeaderComponent={
             <View
-              style={styles.resultsHeader}
+              style={
+                styles.resultsHeader
+              }
             >
               <Text
                 style={[
                   styles.resultsTitle,
                   {
-                    color: colors.text,
+                    color:
+                      colors.text,
                   },
                 ]}
               >
@@ -888,11 +1405,15 @@ const SearchScreen = ({ navigation }) => {
                   },
                 ]}
               >
-                {searchResults.length}{" "}
-                {searchResults.length ===
-                1
-                  ? "result"
-                  : "results"}
+                {
+                  searchResults.length
+                }{" "}
+                {
+                  searchResults.length ===
+                  1
+                    ? "result"
+                    : "results"
+                }
               </Text>
             </View>
           }
@@ -918,16 +1439,20 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
+
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
+
     gap: 12,
   },
 
   backButton: {
     width: 42,
     height: 42,
+
     borderRadius: 14,
+
     alignItems: "center",
     justifyContent: "center",
   },
@@ -938,6 +1463,7 @@ const styles = StyleSheet.create({
 
   searchContainer: {
     flex: 1,
+
     height: 48,
 
     flexDirection: "row",
@@ -956,6 +1482,7 @@ const styles = StyleSheet.create({
 
   searchInput: {
     flex: 1,
+
     height: 48,
 
     fontSize: 14,
@@ -977,17 +1504,19 @@ const styles = StyleSheet.create({
 
   loadingContainer: {
     flex: 1,
+
     alignItems: "center",
     justifyContent: "center",
   },
 
   loadingText: {
     marginTop: 12,
+
     fontSize: 14,
   },
 
   // ============================================================
-  // EMPTY STATE
+  // EMPTY
   // ============================================================
 
   emptyContainer: {
@@ -1049,7 +1578,8 @@ const styles = StyleSheet.create({
 
     paddingHorizontal: 18,
 
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth:
+      StyleSheet.hairlineWidth,
   },
 
   suggestionIcon: {
@@ -1116,10 +1646,12 @@ const styles = StyleSheet.create({
     padding: 10,
 
     shadowColor: "#000000",
+
     shadowOffset: {
       width: 0,
       height: 3,
     },
+
     shadowOpacity: 0.05,
     shadowRadius: 7,
 
@@ -1159,6 +1691,7 @@ const styles = StyleSheet.create({
 
   foodName: {
     fontSize: 15,
+
     fontWeight: "600",
 
     lineHeight: 20,
@@ -1168,7 +1701,14 @@ const styles = StyleSheet.create({
     marginTop: 7,
 
     fontSize: 14,
+
     fontWeight: "700",
+  },
+
+  foodCategory: {
+    marginTop: 3,
+
+    fontSize: 11,
   },
 
   // ============================================================

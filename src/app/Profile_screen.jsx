@@ -789,9 +789,6 @@ const ProfileScreen = () => {
   const totalSpent =
     orderStats?.total_spent ?? 0;
 
-  const currency =
-    orderStats?.currency || "GBP";
-
   // ==========================================================
   // LOGOUT
   // ==========================================================
@@ -2306,7 +2303,7 @@ const ProfileScreen = () => {
                   },
                 ]}
               >
-                {currency} {totalSpent}
+                {totalSpent}
               </Text>
 
               <Text

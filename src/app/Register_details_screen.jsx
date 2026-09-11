@@ -1,24 +1,24 @@
 import { useEffect, useState } from "react";
 
 import {
-    ActivityIndicator,
-    Alert,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-
 import * as Location from "expo-location";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 // ============================================================
 // API
@@ -27,53 +27,164 @@ import * as Location from "expo-location";
 const BASE_URL = "https://api.homecookt.com";
 
 // ============================================================
+// COLORS
+// ============================================================
+
+const COLORS = {
+  orange: "#F97316",
+  gold: "#FBBF24",
+
+  iconOrange: "#FF7A18",
+  iconGold: "#FFB347",
+
+  buttonOrange: "#FF7A18",
+  buttonGold: "#FF9F43",
+
+  background1: "#FEF0E6",
+  background2: "#FEF8F3",
+  background3: "#FEFBEE",
+
+  white: "#FFFFFF",
+
+  foreground: "#1F2937",
+
+  error: "#DC2626",
+};
+
+// ============================================================
 // REGISTER DETAILS SCREEN
 // ============================================================
 
-const RegisterDetailsScreen = ({ route, navigation }) => {
+const RegisterDetailsScreen = () => {
+  const router = useRouter();
+
+  const params = useLocalSearchParams();
+
   // ==========================================================
   // SELECTED ROLES
   // ==========================================================
 
-  const selectedRoles =
-    route?.params?.selectedRoles || ["customer"];
+  let selectedRoles = ["customer"];
+
+  try {
+    if (params?.selectedRoles) {
+      if (
+        Array.isArray(
+          params.selectedRoles
+        )
+      ) {
+        selectedRoles =
+          params.selectedRoles;
+      } else if (
+        typeof params.selectedRoles ===
+        "string"
+      ) {
+        try {
+          const parsed =
+            JSON.parse(
+              params.selectedRoles
+            );
+
+          if (
+            Array.isArray(parsed)
+          ) {
+            selectedRoles = parsed;
+          } else if (
+            parsed
+          ) {
+            selectedRoles = [parsed];
+          }
+        } catch {
+          selectedRoles = [
+            params.selectedRoles,
+          ];
+        }
+      }
+    }
+  } catch (error) {
+    console.log(
+      "ROLE PARAM ERROR =>",
+      error
+    );
+  }
 
   // ==========================================================
   // FORM STATE
   // ==========================================================
 
-  const [email, setEmail] = useState("");
-  const [country, setCountry] = useState("");
-
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] =
+  const [email, setEmail] =
     useState("");
 
-  // ==========================================================
-  // UI STATE
-  // ==========================================================
-
-  const [isLoading, setIsLoading] = useState(false);
-
-  const [obscurePassword, setObscurePassword] =
-    useState(true);
-
-  const [obscureConfirm, setObscureConfirm] =
-    useState(true);
-
-  // ==========================================================
-  // VALIDATION STATE
-  // ==========================================================
-
-  const [emailError, setEmailError] = useState("");
-  const [countryError, setCountryError] = useState("");
-  const [passwordError, setPasswordError] =
-    useState("");
-  const [confirmPasswordError, setConfirmPasswordError] =
+  const [country, setCountry] =
     useState("");
 
+  const [password, setPassword] =
+    useState("");
+
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] = useState("");
+
   // ==========================================================
-  // COUNTRY DETECTION
+  // TERMS
+  // ==========================================================
+
+  const [
+    termsAccepted,
+    setTermsAccepted,
+  ] = useState(false);
+
+  const [
+    termsError,
+    setTermsError,
+  ] = useState("");
+
+  // ==========================================================
+  // LOADING
+  // ==========================================================
+
+  const [isLoading, setIsLoading] =
+    useState(false);
+
+  // ==========================================================
+  // PASSWORD VISIBILITY
+  // ==========================================================
+
+  const [
+    obscurePassword,
+    setObscurePassword,
+  ] = useState(true);
+
+  const [
+    obscureConfirm,
+    setObscureConfirm,
+  ] = useState(true);
+
+  // ==========================================================
+  // VALIDATION ERRORS
+  // ==========================================================
+
+  const [emailError, setEmailError] =
+    useState("");
+
+  const [
+    countryError,
+    setCountryError,
+  ] = useState("");
+
+  const [
+    passwordError,
+    setPasswordError,
+  ] = useState("");
+
+  const [
+    confirmPasswordError,
+    setConfirmPasswordError,
+  ] = useState("");
+
+  // ==========================================================
+  // DETECT COUNTRY ON SCREEN LOAD
   // ==========================================================
 
   useEffect(() => {
@@ -81,67 +192,58 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
   }, []);
 
   // ==========================================================
-  // DETECT COUNTRY
+  // COUNTRY DETECTION
   // ==========================================================
 
   const detectCountry = async () => {
     try {
-      // ------------------------------------------------------
-      // Check whether location services are enabled
-      // ------------------------------------------------------
+      console.log(
+        "COUNTRY DETECTION STARTED"
+      );
 
       const servicesEnabled =
         await Location.hasServicesEnabledAsync();
 
       if (!servicesEnabled) {
         console.log(
-          "Location services are disabled"
+          "LOCATION SERVICES DISABLED"
         );
 
         setCountry("IN");
         return;
       }
 
-      // ------------------------------------------------------
-      // Check permission
-      // ------------------------------------------------------
-
-      let { status } =
+      let permission =
         await Location.getForegroundPermissionsAsync();
 
-      // ------------------------------------------------------
-      // Request permission if not granted
-      // ------------------------------------------------------
-
-      if (status !== "granted") {
-        const permissionResponse =
+      if (
+        permission.status !==
+        "granted"
+      ) {
+        permission =
           await Location.requestForegroundPermissionsAsync();
-
-        status = permissionResponse.status;
       }
 
-      // ------------------------------------------------------
-      // Permission denied
-      // ------------------------------------------------------
-
-      if (status !== "granted") {
+      if (
+        permission.status !==
+        "granted"
+      ) {
         console.log(
-          "Location permission denied"
+          "LOCATION PERMISSION DENIED"
         );
 
+        // Default country
         setCountry("IN");
         return;
       }
 
-      // ------------------------------------------------------
-      // Get current position
-      // ------------------------------------------------------
-
       const location =
-        await Location.getCurrentPositionAsync({
-          accuracy:
-            Location.Accuracy.High,
-        });
+        await Location.getCurrentPositionAsync(
+          {
+            accuracy:
+              Location.Accuracy.High,
+          }
+        );
 
       console.log(
         "LATITUDE =>",
@@ -153,21 +255,21 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
         location.coords.longitude
       );
 
-      // ------------------------------------------------------
-      // Reverse geocode
-      // ------------------------------------------------------
-
       const results =
-        await Location.reverseGeocodeAsync({
-          latitude:
-            location.coords.latitude,
+        await Location.reverseGeocodeAsync(
+          {
+            latitude:
+              location.coords
+                .latitude,
 
-          longitude:
-            location.coords.longitude,
-        });
+            longitude:
+              location.coords
+                .longitude,
+          }
+        );
 
       console.log(
-        "GEOCODING RESULT =>",
+        "REVERSE GEOCODE =>",
         results
       );
 
@@ -176,7 +278,8 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
         results.length > 0
       ) {
         const detectedCountry =
-          results[0]?.isoCountryCode;
+          results[0]
+            ?.isoCountryCode;
 
         if (detectedCountry) {
           setCountry(
@@ -194,10 +297,7 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
         error
       );
 
-      // ------------------------------------------------------
-      // Same fallback as Flutter
-      // ------------------------------------------------------
-
+      // India fallback
       setCountry("IN");
     }
   };
@@ -206,19 +306,25 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
   // EMAIL VALIDATION
   // ==========================================================
 
-  const validateEmail = (value) => {
-    const trimmedValue =
+  const validateEmail = (
+    value
+  ) => {
+    const trimmed =
       value.trim();
 
-    if (!trimmedValue) {
+    if (!trimmed) {
       return "Required";
     }
 
     const emailRegex =
       /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-    if (!emailRegex.test(trimmedValue)) {
-      return "Enter valid email";
+    if (
+      !emailRegex.test(
+        trimmed
+      )
+    ) {
+      return "Enter a valid email address";
     }
 
     return "";
@@ -228,7 +334,9 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
   // PASSWORD VALIDATION
   // ==========================================================
 
-  const validatePassword = (value) => {
+  const validatePassword = (
+    value
+  ) => {
     if (!value.trim()) {
       return "Required";
     }
@@ -259,10 +367,12 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
   };
 
   // ==========================================================
-  // HANDLE EMAIL CHANGE
+  // EMAIL CHANGE
   // ==========================================================
 
-  const handleEmailChange = (value) => {
+  const handleEmailChange = (
+    value
+  ) => {
     setEmail(value);
 
     if (emailError) {
@@ -273,7 +383,7 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
   };
 
   // ==========================================================
-  // HANDLE PASSWORD CHANGE
+  // PASSWORD CHANGE
   // ==========================================================
 
   const handlePasswordChange = (
@@ -289,15 +399,16 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
 
     if (confirmPassword) {
       setConfirmPasswordError(
-        validateConfirmPassword(
+        value ===
           confirmPassword
-        )
+          ? ""
+          : "Passwords do not match"
       );
     }
   };
 
   // ==========================================================
-  // HANDLE CONFIRM PASSWORD CHANGE
+  // CONFIRM PASSWORD CHANGE
   // ==========================================================
 
   const handleConfirmPasswordChange = (
@@ -307,80 +418,139 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
 
     if (confirmPasswordError) {
       setConfirmPasswordError(
-        validateConfirmPassword(
-          value
-        )
+        value === password
+          ? ""
+          : "Passwords do not match"
       );
     }
   };
 
   // ==========================================================
-  // VALIDATE FORM
+  // TERMS CHECKBOX
+  // ==========================================================
+
+  const toggleTerms = () => {
+    setTermsAccepted(
+      (previous) => {
+        const next =
+          !previous;
+
+        if (next) {
+          setTermsError("");
+        }
+
+        return next;
+      }
+    );
+  };
+
+  // ==========================================================
+  // OPEN TERMS & CONDITIONS
+  //
+  // IMPORTANT:
+  // This opens the existing Privacy Policy screen.
+  //
+  // Expo Router file:
+  // src/app/Privacy_policy_screen.jsx
+  //
+  // ==========================================================
+
+  const openTermsAndConditions =
+    () => {
+      router.push(
+        "/Privacy_policy_screen"
+      );
+    };
+
+  // ==========================================================
+  // VALIDATE COMPLETE FORM
   // ==========================================================
 
   const validateForm = () => {
+    let valid = true;
+
+    // --------------------------------------------------------
+    // EMAIL
+    // --------------------------------------------------------
+
     const emailValidation =
       validateEmail(email);
 
+    if (emailValidation) {
+      setEmailError(
+        emailValidation
+      );
+
+      valid = false;
+    } else {
+      setEmailError("");
+    }
+
+    // --------------------------------------------------------
+    // COUNTRY
+    // --------------------------------------------------------
+
+    if (!country.trim()) {
+      setCountryError(
+        "Country is required"
+      );
+
+      valid = false;
+    } else {
+      setCountryError("");
+    }
+
+    // --------------------------------------------------------
+    // PASSWORD
+    // --------------------------------------------------------
+
     const passwordValidation =
       validatePassword(password);
+
+    if (passwordValidation) {
+      setPasswordError(
+        passwordValidation
+      );
+
+      valid = false;
+    } else {
+      setPasswordError("");
+    }
+
+    // --------------------------------------------------------
+    // CONFIRM PASSWORD
+    // --------------------------------------------------------
 
     const confirmValidation =
       validateConfirmPassword(
         confirmPassword
       );
 
-    let valid = true;
-
-    if (emailValidation) {
-      setEmailError(
-        emailValidation
-      );
-      valid = false;
-    } else {
-      setEmailError("");
-    }
-
-    if (!country.trim()) {
-      setCountryError("Required");
-      valid = false;
-    } else {
-      setCountryError("");
-    }
-
-    if (passwordValidation) {
-      setPasswordError(
-        passwordValidation
-      );
-      valid = false;
-    } else {
-      setPasswordError("");
-    }
-
     if (confirmValidation) {
       setConfirmPasswordError(
         confirmValidation
       );
+
       valid = false;
     } else {
       setConfirmPasswordError("");
     }
 
+    // --------------------------------------------------------
+    // TERMS
+    // --------------------------------------------------------
+
+    if (!termsAccepted) {
+      setTermsError(
+        "Please accept the Terms & Conditions"
+      );
+
+      valid = false;
+    } else {
+      setTermsError("");
+    }
+
     return valid;
-  };
-
-  // ==========================================================
-  // SHOW MESSAGE
-  // ==========================================================
-
-  const showMessage = (
-    message,
-    success = false
-  ) => {
-    Alert.alert(
-      success ? "Success" : "Error",
-      message
-    );
   };
 
   // ==========================================================
@@ -390,16 +560,24 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
   const registerUser = async () => {
     Keyboard.dismiss();
 
+    console.log(
+      "REGISTER BUTTON PRESSED"
+    );
+
     // --------------------------------------------------------
-    // Validate form
+    // VALIDATE
     // --------------------------------------------------------
 
     if (!validateForm()) {
+      console.log(
+        "FORM VALIDATION FAILED"
+      );
+
       return;
     }
 
     // --------------------------------------------------------
-    // Prevent duplicate requests
+    // PREVENT DOUBLE REQUEST
     // --------------------------------------------------------
 
     if (isLoading) {
@@ -410,23 +588,20 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
       setIsLoading(true);
 
       // ------------------------------------------------------
-      // Request body
+      // REQUEST BODY
       // ------------------------------------------------------
 
       const requestBody = {
-        email: email.trim(),
+        email:
+          email.trim(),
 
-        country: country
-          .trim()
-          .toUpperCase(),
+        country:
+          country
+            .trim()
+            .toUpperCase(),
 
-        password: password.trim(),
-
-        // ----------------------------------------------------
-        // Same behavior as your Flutter code.
-        //
-        // It always sends customer.
-        // ----------------------------------------------------
+        password:
+          password.trim(),
 
         role: ["customer"],
       };
@@ -437,7 +612,7 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
       );
 
       // ------------------------------------------------------
-      // 20 second timeout
+      // ABORT CONTROLLER
       // ------------------------------------------------------
 
       const controller =
@@ -451,75 +626,76 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
       let response;
 
       try {
-        response = await fetch(
-          `${BASE_URL}/api/v1/users/signup`,
-          {
-            method: "POST",
+        response =
+          await fetch(
+            `${BASE_URL}/api/v1/users/signup`,
+            {
+              method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
+              headers: {
+                "Content-Type":
+                  "application/json",
 
-              Accept:
-                "application/json",
-            },
+                Accept:
+                  "application/json",
+              },
 
-            body: JSON.stringify(
-              requestBody
-            ),
+              body:
+                JSON.stringify(
+                  requestBody
+                ),
 
-            signal:
-              controller.signal,
-          }
-        );
+              signal:
+                controller.signal,
+            }
+          );
       } finally {
-        clearTimeout(timeoutId);
+        clearTimeout(
+          timeoutId
+        );
       }
 
       // ------------------------------------------------------
-      // Read response
+      // RESPONSE
       // ------------------------------------------------------
 
       const responseText =
         await response.text();
 
       console.log(
-        "Signup Status:",
+        "SIGNUP STATUS =>",
         response.status
       );
 
       console.log(
-        "Signup Body:",
+        "SIGNUP RESPONSE =>",
         responseText
       );
 
       // ------------------------------------------------------
-      // Parse response
+      // PARSE JSON
       // ------------------------------------------------------
 
       let data = {};
 
-      try {
-        data =
-          responseText
-            ? JSON.parse(
-                responseText
-              )
-            : {};
-      } catch (error) {
-        console.log(
-          "SIGNUP JSON ERROR =>",
-          error
-        );
+      if (responseText) {
+        try {
+          data =
+            JSON.parse(
+              responseText
+            );
+        } catch (parseError) {
+          console.log(
+            "SIGNUP JSON PARSE ERROR =>",
+            parseError
+          );
 
-        data = {
-          message:
-            "Something went wrong",
-        };
+          data = {};
+        }
       }
 
       // ------------------------------------------------------
-      // Success
+      // SUCCESS
       // ------------------------------------------------------
 
       if (
@@ -528,43 +704,97 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
       ) {
         const message =
           data?.message ||
-          "OTP sent successfully";
+          "Registration successful. OTP sent to your email.";
 
-        showMessage(
+        console.log(
+          "SIGNUP SUCCESS =>",
+          message
+        );
+
+        Alert.alert(
+          "Success",
           message,
-          true
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                // ------------------------------------------
+                // EXPO ROUTER → OTP
+                // ------------------------------------------
+
+                router.push({
+                  pathname:
+                    "/OTP",
+
+                  params: {
+                    method:
+                      "email",
+
+                    value:
+                      email.trim(),
+                  },
+                });
+              },
+            },
+          ]
         );
 
-        // ----------------------------------------------------
-        // Navigate to OTP screen
-        //
-        // The OTP screen created earlier expects:
-        //
-        // route.params.method
-        // route.params.value
-        //
-        // ----------------------------------------------------
-
-        navigation.navigate(
-          "OTP",
-          {
-            method: "email",
-            value: email.trim(),
-          }
-        );
-      } else {
-        // ----------------------------------------------------
-        // API error
-        // ----------------------------------------------------
-
-        const message =
-          data?.message ||
-          data?.detail ||
-          data?.error ||
-          "Registration failed";
-
-        showMessage(message);
+        return;
       }
+
+      // ------------------------------------------------------
+      // API ERROR
+      // ------------------------------------------------------
+
+      let errorMessage =
+        "Registration failed";
+
+      if (
+        typeof data?.detail ===
+        "string"
+      ) {
+        errorMessage =
+          data.detail;
+      } else if (
+        typeof data?.message ===
+        "string"
+      ) {
+        errorMessage =
+          data.message;
+      } else if (
+        typeof data?.error ===
+        "string"
+      ) {
+        errorMessage =
+          data.error;
+      } else if (
+        Array.isArray(
+          data?.detail
+        )
+      ) {
+        errorMessage =
+          data.detail
+            .map((item) => {
+              if (
+                typeof item ===
+                "string"
+              ) {
+                return item;
+              }
+
+              return (
+                item?.msg ||
+                item?.message ||
+                "Invalid input"
+              );
+            })
+            .join("\n");
+      }
+
+      Alert.alert(
+        "Registration Failed",
+        errorMessage
+      );
     } catch (error) {
       console.log(
         "REGISTER ERROR =>",
@@ -572,45 +802,48 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
       );
 
       // ------------------------------------------------------
-      // Timeout
+      // TIMEOUT
       // ------------------------------------------------------
 
       if (
         error?.name ===
         "AbortError"
       ) {
-        showMessage(
-          "Request timed out"
+        Alert.alert(
+          "Request Timeout",
+          "The server took too long to respond. Please try again."
         );
 
         return;
       }
 
       // ------------------------------------------------------
-      // Network error
+      // NETWORK
       // ------------------------------------------------------
 
       if (
         error?.message
           ?.toLowerCase()
-          .includes("network")
+          .includes(
+            "network"
+          )
       ) {
-        showMessage(
-          "No internet connection"
+        Alert.alert(
+          "Network Error",
+          "Please check your internet connection and try again."
         );
 
         return;
       }
 
       // ------------------------------------------------------
-      // General error
+      // GENERAL
       // ------------------------------------------------------
 
-      showMessage(
-        `Error: ${
-          error?.message ||
-          "Something went wrong"
-        }`
+      Alert.alert(
+        "Error",
+        error?.message ||
+          "Something went wrong. Please try again."
       );
     } finally {
       setIsLoading(false);
@@ -618,31 +851,7 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
   };
 
   // ==========================================================
-  // ROLE BADGE
-  // ==========================================================
-
-  const renderRoleBadge = (
-    role,
-    index
-  ) => {
-    return (
-      <View
-        key={`${role}-${index}`}
-        style={styles.roleBadge}
-      >
-        <Text
-          style={styles.roleText}
-        >
-          {role
-            ?.toString()
-            .toUpperCase()}
-        </Text>
-      </View>
-    );
-  };
-
-  // ==========================================================
-  // TEXT INPUT
+  // INPUT COMPONENT
   // ==========================================================
 
   const renderInput = ({
@@ -659,28 +868,40 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
   }) => {
     return (
       <View
-        style={styles.inputContainer}
+        style={
+          styles.inputContainer
+        }
       >
         <View
           style={[
             styles.inputWrapper,
+
             error &&
               styles.inputWrapperError,
+
+            !editable &&
+              styles.inputWrapperDisabled,
           ]}
         >
-          {/* ICON */}
+          {/* INPUT ICON */}
 
           <Ionicons
             name={icon}
             size={21}
-            color={COLORS.orange}
-            style={styles.inputIcon}
+            color={
+              COLORS.orange
+            }
+            style={
+              styles.inputIcon
+            }
           />
 
           {/* INPUT */}
 
           <TextInput
-            style={styles.input}
+            style={
+              styles.input
+            }
             placeholder={
               placeholder
             }
@@ -692,20 +913,24 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
             secureTextEntry={
               secureTextEntry
             }
-            editable={editable}
+            editable={
+              editable
+            }
             keyboardType={
               keyboardType
             }
             autoCapitalize={
               autoCapitalize
             }
-            autoCorrect={false}
+            autoCorrect={
+              false
+            }
             returnKeyType="next"
           />
 
-          {/* PASSWORD EYE */}
+          {/* EYE ICON */}
 
-          {onToggleSecure && (
+          {onToggleSecure ? (
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={
@@ -725,7 +950,7 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
                 color="#6B7280"
               />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
 
         {/* ERROR */}
@@ -744,11 +969,50 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
   };
 
   // ==========================================================
-  // SCREEN
+  // ROLE BADGE
+  // ==========================================================
+
+  const renderRoleBadge = (
+    role,
+    index
+  ) => {
+    return (
+      <View
+        key={`${role}-${index}`}
+        style={
+          styles.roleBadge
+        }
+      >
+        <Ionicons
+          name="person-outline"
+          size={14}
+          color={
+            COLORS.orange
+          }
+        />
+
+        <Text
+          style={
+            styles.roleText
+          }
+        >
+          {String(role)
+            .toUpperCase()}
+        </Text>
+      </View>
+    );
+  };
+
+  // ==========================================================
+  // UI
   // ==========================================================
 
   return (
-    <View style={styles.container}>
+    <View
+      style={
+        styles.container
+      }
+    >
       <StatusBar
         barStyle="dark-content"
         backgroundColor={
@@ -780,7 +1044,7 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
       />
 
       {/* ======================================================
-          KEYBOARD AVOIDING VIEW
+          KEYBOARD CONTAINER
       ====================================================== */}
 
       <KeyboardAvoidingView
@@ -813,7 +1077,7 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
           />
 
           {/* ==================================================
-              ICON
+              REGISTER ICON
           ================================================== */}
 
           <View
@@ -853,13 +1117,15 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
           ================================================== */}
 
           <Text
-            style={styles.title}
+            style={
+              styles.title
+            }
           >
             Create Account
           </Text>
 
           {/* ==================================================
-              ROLE BADGES
+              ROLES
           ================================================== */}
 
           <View
@@ -884,9 +1150,13 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
           ================================================== */}
 
           <View
-            style={styles.formCard}
+            style={
+              styles.formCard
+            }
           >
-            {/* EMAIL */}
+            {/* =================================================
+                EMAIL
+            ================================================= */}
 
             {renderInput({
               icon:
@@ -895,7 +1165,8 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
               placeholder:
                 "Email Address",
 
-              value: email,
+              value:
+                email,
 
               onChangeText:
                 handleEmailChange,
@@ -910,7 +1181,9 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
                 emailError,
             })}
 
-            {/* COUNTRY */}
+            {/* =================================================
+                COUNTRY
+            ================================================= */}
 
             {renderInput({
               icon:
@@ -921,12 +1194,14 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
                   ? "Country"
                   : "Detecting Country...",
 
-              value: country,
+              value:
+                country,
 
               onChangeText:
                 setCountry,
 
-              editable: false,
+              editable:
+                false,
 
               autoCapitalize:
                 "characters",
@@ -935,7 +1210,9 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
                 countryError,
             })}
 
-            {/* PASSWORD */}
+            {/* =================================================
+                PASSWORD
+            ================================================= */}
 
             {renderInput({
               icon:
@@ -944,7 +1221,8 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
               placeholder:
                 "Password",
 
-              value: password,
+              value:
+                password,
 
               onChangeText:
                 handlePasswordChange,
@@ -955,7 +1233,9 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
               onToggleSecure:
                 () =>
                   setObscurePassword(
-                    (previous) =>
+                    (
+                      previous
+                    ) =>
                       !previous
                   ),
 
@@ -963,7 +1243,9 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
                 passwordError,
             })}
 
-            {/* CONFIRM PASSWORD */}
+            {/* =================================================
+                CONFIRM PASSWORD
+            ================================================= */}
 
             {renderInput({
               icon:
@@ -984,7 +1266,9 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
               onToggleSecure:
                 () =>
                   setObscureConfirm(
-                    (previous) =>
+                    (
+                      previous
+                    ) =>
                       !previous
                   ),
 
@@ -993,12 +1277,98 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
             })}
 
             {/* =================================================
+                TERMS & CONDITIONS
+            ================================================= */}
+
+            <View
+              style={
+                styles.termsContainer
+              }
+            >
+              {/* CHECKBOX */}
+
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={
+                  toggleTerms
+                }
+                style={
+                  styles.checkboxButton
+                }
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+
+                    termsAccepted &&
+                      styles.checkboxChecked,
+
+                    termsError &&
+                      !termsAccepted &&
+                      styles.checkboxError,
+                  ]}
+                >
+                  {termsAccepted ? (
+                    <Ionicons
+                      name="checkmark"
+                      size={18}
+                      color={
+                        COLORS.white
+                      }
+                    />
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+
+              {/* TERMS TEXT */}
+
+              <View
+                style={
+                  styles.termsTextContainer
+                }
+              >
+                <Text
+                  style={
+                    styles.termsText
+                  }
+                >
+                  I agree to the{" "}
+                  <Text
+                    style={
+                      styles.termsLink
+                    }
+                    onPress={
+                      openTermsAndConditions
+                    }
+                  >
+                    Terms & Conditions
+                  </Text>
+                  {" "}and acknowledge that I have read the Privacy Policy.
+                </Text>
+              </View>
+            </View>
+
+            {/* TERMS ERROR */}
+
+            {termsError ? (
+              <Text
+                style={
+                  styles.termsErrorText
+                }
+              >
+                {termsError}
+              </Text>
+            ) : null}
+
+            {/* =================================================
                 CREATE ACCOUNT BUTTON
             ================================================= */}
 
             <TouchableOpacity
               activeOpacity={0.85}
-              disabled={isLoading}
+              disabled={
+                isLoading
+              }
               onPress={
                 registerUser
               }
@@ -1021,17 +1391,32 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
                 }}
                 style={[
                   styles.createButton,
+
                   isLoading &&
                     styles.buttonDisabled,
                 ]}
               >
                 {isLoading ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={
-                      COLORS.white
+                  <View
+                    style={
+                      styles.loadingContainer
                     }
-                  />
+                  >
+                    <ActivityIndicator
+                      size="small"
+                      color={
+                        COLORS.white
+                      }
+                    />
+
+                    <Text
+                      style={
+                        styles.loadingText
+                      }
+                    >
+                      Creating Account...
+                    </Text>
+                  </View>
                 ) : (
                   <Text
                     style={
@@ -1045,7 +1430,9 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
             </TouchableOpacity>
           </View>
 
-          {/* Bottom spacing */}
+          {/* ==================================================
+              BOTTOM SPACING
+          ================================================== */}
 
           <View
             style={
@@ -1059,42 +1446,16 @@ const RegisterDetailsScreen = ({ route, navigation }) => {
 };
 
 // ============================================================
-// COLORS
-// ============================================================
-
-const COLORS = {
-  orange: "#F97316",
-  gold: "#F59E0B",
-
-  iconOrange: "#FF7A18",
-  iconGold: "#FFB347",
-
-  buttonOrange: "#FF7A18",
-  buttonGold: "#FF9F43",
-
-  background1: "#FEF0E6",
-  background2: "#FEF8F3",
-  background3: "#FEFBEE",
-
-  white: "#FFFFFF",
-
-  foreground: "#1F2937",
-
-  error: "#DC2626",
-};
-
-// ============================================================
 // STYLES
 // ============================================================
 
 const styles = StyleSheet.create({
   // ==========================================================
-  // MAIN
+  // CONTAINER
   // ==========================================================
 
   container: {
     flex: 1,
-
     backgroundColor:
       COLORS.background1,
   },
@@ -1116,7 +1477,7 @@ const styles = StyleSheet.create({
   },
 
   // ==========================================================
-  // TOP ICON
+  // ICON
   // ==========================================================
 
   iconContainer: {
@@ -1127,11 +1488,13 @@ const styles = StyleSheet.create({
 
   iconGradient: {
     width: 90,
+
     height: 90,
 
     borderRadius: 30,
 
     alignItems: "center",
+
     justifyContent: "center",
 
     shadowColor:
@@ -1162,7 +1525,8 @@ const styles = StyleSheet.create({
 
     fontWeight: "700",
 
-    color: COLORS.foreground,
+    color:
+      COLORS.foreground,
   },
 
   // ==========================================================
@@ -1185,6 +1549,10 @@ const styles = StyleSheet.create({
   },
 
   roleBadge: {
+    flexDirection: "row",
+
+    alignItems: "center",
+
     paddingHorizontal: 14,
 
     paddingVertical: 8,
@@ -1193,6 +1561,8 @@ const styles = StyleSheet.create({
 
     backgroundColor:
       "#FFEDD5",
+
+    gap: 5,
   },
 
   roleText: {
@@ -1233,16 +1603,12 @@ const styles = StyleSheet.create({
   },
 
   // ==========================================================
-  // INPUT CONTAINER
+  // INPUT
   // ==========================================================
 
   inputContainer: {
     marginBottom: 18,
   },
-
-  // ==========================================================
-  // INPUT WRAPPER
-  // ==========================================================
 
   inputWrapper: {
     height: 56,
@@ -1267,19 +1633,16 @@ const styles = StyleSheet.create({
       "#FCA5A5",
   },
 
-  // ==========================================================
-  // INPUT ICON
-  // ==========================================================
+  inputWrapperDisabled: {
+    backgroundColor:
+      "#F3F4F6",
+  },
 
   inputIcon: {
     marginLeft: 16,
 
     marginRight: 10,
   },
-
-  // ==========================================================
-  // INPUT
-  // ==========================================================
 
   input: {
     flex: 1,
@@ -1319,7 +1682,106 @@ const styles = StyleSheet.create({
 
     marginLeft: 8,
 
-    color: COLORS.error,
+    color:
+      COLORS.error,
+
+    fontSize: 12,
+
+    fontWeight: "500",
+  },
+
+  // ==========================================================
+  // TERMS
+  // ==========================================================
+
+  termsContainer: {
+    flexDirection: "row",
+
+    alignItems: "flex-start",
+
+    marginTop: 2,
+
+    marginBottom: 4,
+
+    paddingHorizontal: 2,
+  },
+
+  checkboxButton: {
+    width: 28,
+
+    height: 28,
+
+    alignItems: "center",
+
+    justifyContent: "center",
+
+    marginRight: 8,
+  },
+
+  checkbox: {
+    width: 21,
+
+    height: 21,
+
+    borderRadius: 6,
+
+    borderWidth: 2,
+
+    borderColor:
+      "#D1D5DB",
+
+    backgroundColor:
+      COLORS.white,
+
+    alignItems: "center",
+
+    justifyContent: "center",
+  },
+
+  checkboxChecked: {
+    backgroundColor:
+      COLORS.orange,
+
+    borderColor:
+      COLORS.orange,
+  },
+
+  checkboxError: {
+    borderColor:
+      "#EF4444",
+  },
+
+  termsTextContainer: {
+    flex: 1,
+
+    paddingTop: 1,
+  },
+
+  termsText: {
+    fontSize: 13,
+
+    lineHeight: 20,
+
+    color: "#6B7280",
+  },
+
+  termsLink: {
+    color:
+      COLORS.orange,
+
+    fontWeight: "700",
+
+    textDecorationLine:
+      "underline",
+  },
+
+  termsErrorText: {
+    marginTop: 3,
+
+    marginLeft: 38,
+
+    color:
+      COLORS.error,
 
     fontSize: 12,
 
@@ -1335,7 +1797,7 @@ const styles = StyleSheet.create({
 
     height: 58,
 
-    marginTop: 10,
+    marginTop: 18,
 
     borderRadius: 18,
 
@@ -1365,6 +1827,25 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  loadingContainer: {
+    flexDirection: "row",
+
+    alignItems: "center",
+
+    justifyContent: "center",
+
+    gap: 10,
+  },
+
+  loadingText: {
+    color:
+      COLORS.white,
+
+    fontSize: 15,
+
+    fontWeight: "600",
+  },
+
   // ==========================================================
   // BOTTOM
   // ==========================================================
@@ -1375,3 +1856,4 @@ const styles = StyleSheet.create({
 });
 
 export default RegisterDetailsScreen;
+
