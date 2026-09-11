@@ -41,11 +41,11 @@ const BASE_URL = "https://api.homecookt.com";
 //
 // Change this to 5, 10, 15, etc.
 //
-// 10 = 10 kilometers
+// 15 = 15 kilometers
 //
 // ============================================================
 
-const NEARBY_RADIUS_KM = 10;
+const NEARBY_RADIUS_KM = 15;
 
 // ============================================================
 // COLORS
