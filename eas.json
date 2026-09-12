@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 24.1.0",
+    "version": ">= 24.3.0",
     "appVersionSource": "remote"
   },
   "build": {
@@ -12,6 +12,7 @@
       "distribution": "internal"
     },
     "production": {
+      "distribution": "store",
       "autoIncrement": true
     }
   },
