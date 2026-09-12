@@ -7,32 +7,14 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 
 // ============================================================
-// COLORS
+// GLOBAL THEME
 // ============================================================
 
-const AppColors = {
-  background: "#FFF9F5",
-  card: "#FFFFFF",
-
-  darkBackground: "#121212",
-  darkCard: "#1E1E1E",
-
-  foreground: "#1F2937",
-  darkForeground: "#F5F5F5",
-
-  mutedForeground: "#6B7280",
-  darkMutedForeground: "#D1D5DB",
-
-  amber: "#F59E0B",
-
-  lightBorder: "#F0EAE5",
-  darkBorder: "#2A2A2A",
-};
+import { useApp } from "./_layout";
 
 // ============================================================
 // PRIVACY POLICY SCREEN
@@ -46,46 +28,10 @@ const PrivacyPolicyScreen = () => {
   const router = useRouter();
 
   // ==========================================================
-  // SYSTEM THEME
+  // GLOBAL APP THEME
   // ==========================================================
 
-  const systemColorScheme = useColorScheme();
-
-  const isDark = systemColorScheme === "dark";
-
-  // ==========================================================
-  // THEME COLORS
-  // ==========================================================
-
-  const colors = {
-    background: isDark
-      ? AppColors.darkBackground
-      : AppColors.background,
-
-    card: isDark
-      ? AppColors.darkCard
-      : AppColors.card,
-
-    foreground: isDark
-      ? AppColors.darkForeground
-      : AppColors.foreground,
-
-    bodyText: isDark
-      ? "rgba(245,245,245,0.88)"
-      : "rgba(31,41,55,0.85)",
-
-    muted: isDark
-      ? AppColors.darkMutedForeground
-      : AppColors.mutedForeground,
-
-    border: isDark
-      ? AppColors.darkBorder
-      : AppColors.lightBorder,
-
-    policyBorder: isDark
-      ? "rgba(245,158,11,0.18)"
-      : "rgba(245,158,11,0.15)",
-  };
+  const { isDarkMode, colors } = useApp();
 
   // ==========================================================
   // GO BACK
@@ -173,7 +119,7 @@ const PrivacyPolicyScreen = () => {
 
       <StatusBar
         barStyle={
-          isDark
+          isDarkMode
             ? "light-content"
             : "dark-content"
         }
@@ -198,7 +144,12 @@ const PrivacyPolicyScreen = () => {
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={goBack}
-          style={styles.backButton}
+          style={[
+            styles.backButton,
+            {
+              backgroundColor: colors.muted,
+            },
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
@@ -245,7 +196,7 @@ const PrivacyPolicyScreen = () => {
             styles.policyCard,
             {
               backgroundColor: colors.card,
-              borderColor: colors.policyBorder,
+              borderColor: colors.glassBorder,
             },
           ]}
         >
@@ -272,7 +223,7 @@ const PrivacyPolicyScreen = () => {
             style={[
               styles.lastUpdated,
               {
-                color: colors.muted,
+                color: colors.mutedForeground,
               },
             ]}
           >
@@ -287,7 +238,7 @@ const PrivacyPolicyScreen = () => {
             style={[
               styles.introduction,
               {
-                color: colors.bodyText,
+                color: colors.textSecondary,
               },
             ]}
           >
@@ -330,7 +281,7 @@ const PrivacyPolicyScreen = () => {
                 style={[
                   styles.sectionContent,
                   {
-                    color: colors.bodyText,
+                    color: colors.textSecondary,
                   },
                 ]}
               >
@@ -349,14 +300,14 @@ const PrivacyPolicyScreen = () => {
             styles.footerCard,
             {
               backgroundColor: colors.card,
-              borderColor: colors.policyBorder,
+              borderColor: colors.glassBorder,
             },
           ]}
         >
           <Ionicons
             name="shield-checkmark-outline"
             size={30}
-            color={AppColors.amber}
+            color={colors.gold}
           />
 
           <Text
@@ -374,7 +325,7 @@ const PrivacyPolicyScreen = () => {
             style={[
               styles.footerText,
               {
-                color: colors.muted,
+                color: colors.mutedForeground,
               },
             ]}
           >
@@ -420,6 +371,7 @@ const styles = StyleSheet.create({
     height: 60,
 
     flexDirection: "row",
+
     alignItems: "center",
 
     paddingHorizontal: 16,
@@ -429,9 +381,11 @@ const styles = StyleSheet.create({
 
   backButton: {
     width: 42,
+
     height: 42,
 
     alignItems: "center",
+
     justifyContent: "center",
 
     borderRadius: 21,
@@ -441,6 +395,7 @@ const styles = StyleSheet.create({
     flex: 1,
 
     fontSize: 18,
+
     fontWeight: "700",
 
     marginLeft: 4,
@@ -456,7 +411,9 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     paddingHorizontal: 16,
+
     paddingTop: 16,
+
     paddingBottom: 30,
   },
 
@@ -478,6 +435,7 @@ const styles = StyleSheet.create({
 
   policyTitle: {
     fontSize: 24,
+
     fontWeight: "700",
 
     marginBottom: 8,

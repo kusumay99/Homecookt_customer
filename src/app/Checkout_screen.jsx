@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useApp } from "./_layout";
 
 const BASE_URL = "https://api.homecookt.com";
 
@@ -41,26 +42,14 @@ const CheckoutScreen = () => {
 
   const [cartItems, setCartItems] = useState([]);
 
-  const isDark = false;
-
   // ============================================================
-  // COLORS
+  // THEME
   // ============================================================
 
-  const colors = {
-    background: isDark ? "#121212" : "#F7F7F7",
-    card: isDark ? "#1E1E1E" : "#FFFFFF",
-    foreground: isDark ? "#FFFFFF" : "#222222",
-    muted: isDark ? "#AAAAAA" : "#777777",
-    border: isDark ? "#3A3A3A" : "#DDDDDD",
-    inputBackground: isDark
-      ? "#1E1E1E"
-      : "#FFFFFF",
-
-    orange: "#FF7A00",
-    red: "#E53935",
-    green: "#2E7D32",
-  };
+  const {
+    isDarkMode,
+    colors,
+  } = useApp();
 
   // ============================================================
   // FORMAT PRICE
@@ -92,7 +81,7 @@ const CheckoutScreen = () => {
             {
               text: "OK",
               onPress: () => {
-                router.replace("/Login");
+                router.replace("/Login_screen");
               },
             },
           ]
@@ -147,7 +136,7 @@ const CheckoutScreen = () => {
             {
               text: "OK",
               onPress: () => {
-                router.replace("/Login");
+                router.replace("/Login_screen");
               },
             },
           ]
@@ -160,8 +149,8 @@ const CheckoutScreen = () => {
         Alert.alert(
           "Cart Error",
           data?.detail ||
-            data?.message ||
-            `Unable to load cart (${response.status})`
+          data?.message ||
+          `Unable to load cart (${response.status})`
         );
 
         return;
@@ -173,7 +162,7 @@ const CheckoutScreen = () => {
 
       const apiSubtotal = Number(
         data?.cart_summary?.grand_total ??
-          0
+        0
       );
 
       const apiDeliveryFee = Number(
@@ -401,9 +390,9 @@ const CheckoutScreen = () => {
         Alert.alert(
           "Order Placed Successfully 🎉",
           `${message}\n\n` +
-            `Order ID: ${orderId}\n` +
-            `Status: ${orderStatus}\n` +
-            `Payment: ${paymentStatus}`,
+          `Order ID: ${orderId}\n` +
+          `Status: ${orderStatus}\n` +
+          `Payment: ${paymentStatus}`,
           [
             {
               text: "OK",
@@ -461,8 +450,8 @@ const CheckoutScreen = () => {
           typeof data.detail === "string"
             ? data.detail
             : JSON.stringify(
-                data.detail
-              );
+              data.detail
+            );
       } else if (data?.message) {
         errorMessage =
           data.message;
@@ -484,7 +473,7 @@ const CheckoutScreen = () => {
       Alert.alert(
         "Error",
         error?.message ||
-          "Unable to connect to the server. Please try again."
+        "Unable to connect to the server. Please try again."
       );
     } finally {
       setIsLoading(false);
@@ -523,7 +512,7 @@ const CheckoutScreen = () => {
 
                 borderColor:
                   deliveryType ===
-                  "self_pickup"
+                    "self_pickup"
                     ? colors.orange
                     : colors.border,
               },
@@ -540,7 +529,7 @@ const CheckoutScreen = () => {
                 {
                   borderColor:
                     deliveryType ===
-                    "self_pickup"
+                      "self_pickup"
                       ? colors.orange
                       : colors.muted,
                 },
@@ -548,16 +537,16 @@ const CheckoutScreen = () => {
             >
               {deliveryType ===
                 "self_pickup" && (
-                <View
-                  style={[
-                    styles.radioInner,
-                    {
-                      backgroundColor:
-                        colors.orange,
-                    },
-                  ]}
-                />
-              )}
+                  <View
+                    style={[
+                      styles.radioInner,
+                      {
+                        backgroundColor:
+                          colors.orange,
+                      },
+                    ]}
+                  />
+                )}
             </View>
 
             <View
@@ -603,7 +592,7 @@ const CheckoutScreen = () => {
 
                 borderColor:
                   deliveryType ===
-                  "delivery_partner"
+                    "delivery_partner"
                     ? colors.orange
                     : colors.border,
               },
@@ -620,7 +609,7 @@ const CheckoutScreen = () => {
                 {
                   borderColor:
                     deliveryType ===
-                    "delivery_partner"
+                      "delivery_partner"
                       ? colors.orange
                       : colors.muted,
                 },
@@ -628,16 +617,16 @@ const CheckoutScreen = () => {
             >
               {deliveryType ===
                 "delivery_partner" && (
-                <View
-                  style={[
-                    styles.radioInner,
-                    {
-                      backgroundColor:
-                        colors.orange,
-                    },
-                  ]}
-                />
-              )}
+                  <View
+                    style={[
+                      styles.radioInner,
+                      {
+                        backgroundColor:
+                          colors.orange,
+                      },
+                    ]}
+                  />
+                )}
             </View>
 
             <View
@@ -707,7 +696,7 @@ const CheckoutScreen = () => {
 
                 borderColor:
                   paymentMethod ===
-                  "COD"
+                    "COD"
                     ? colors.orange
                     : colors.border,
               },
@@ -722,7 +711,7 @@ const CheckoutScreen = () => {
                 {
                   borderColor:
                     paymentMethod ===
-                    "COD"
+                      "COD"
                       ? colors.orange
                       : colors.muted,
                 },
@@ -730,16 +719,16 @@ const CheckoutScreen = () => {
             >
               {paymentMethod ===
                 "COD" && (
-                <View
-                  style={[
-                    styles.radioInner,
-                    {
-                      backgroundColor:
-                        colors.orange,
-                    },
-                  ]}
-                />
-              )}
+                  <View
+                    style={[
+                      styles.radioInner,
+                      {
+                        backgroundColor:
+                          colors.orange,
+                      },
+                    ]}
+                  />
+                )}
             </View>
 
             <View
@@ -785,7 +774,7 @@ const CheckoutScreen = () => {
 
                 borderColor:
                   paymentMethod ===
-                  "ONLINE"
+                    "ONLINE"
                     ? colors.orange
                     : colors.border,
               },
@@ -802,7 +791,7 @@ const CheckoutScreen = () => {
                 {
                   borderColor:
                     paymentMethod ===
-                    "ONLINE"
+                      "ONLINE"
                       ? colors.orange
                       : colors.muted,
                 },
@@ -810,16 +799,16 @@ const CheckoutScreen = () => {
             >
               {paymentMethod ===
                 "ONLINE" && (
-                <View
-                  style={[
-                    styles.radioInner,
-                    {
-                      backgroundColor:
-                        colors.orange,
-                    },
-                  ]}
-                />
-              )}
+                  <View
+                    style={[
+                      styles.radioInner,
+                      {
+                        backgroundColor:
+                          colors.orange,
+                      },
+                    ]}
+                  />
+                )}
             </View>
 
             <View
@@ -896,14 +885,14 @@ const CheckoutScreen = () => {
               <View
                 key={String(
                   item?.cart_id ??
-                    item?.id ??
-                    index
+                  item?.id ??
+                  index
                 )}
                 style={[
                   styles.itemRow,
                   index <
                   cartItems.length -
-                    1 && {
+                  1 && {
                     borderBottomWidth: 1,
                     borderBottomColor:
                       colors.border,
@@ -1212,7 +1201,7 @@ const CheckoutScreen = () => {
     >
       <StatusBar
         barStyle={
-          isDark
+          isDarkMode
             ? "light-content"
             : "dark-content"
         }
@@ -1391,8 +1380,8 @@ const CheckoutScreen = () => {
                 deliveryFee === 0
                   ? "FREE"
                   : formatPrice(
-                      deliveryFee
-                    )
+                    deliveryFee
+                  )
               }
             />
 

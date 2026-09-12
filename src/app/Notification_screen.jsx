@@ -1,22 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    RefreshControl,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 
-// Your global theme provider from _layout.tsx
+// ============================================================
+// GLOBAL THEME
+// ============================================================
+
 import { useApp } from "./_layout";
 
 // ============================================================
@@ -26,36 +29,17 @@ import { useApp } from "./_layout";
 const BASE_URL = "https://api.homecookt.com";
 
 // ============================================================
-// COLORS
-// ============================================================
-
-const COLORS = {
-  orange: "#F97316",
-  gold: "#FBBF24",
-
-  lightBackground: "#FEF8F3",
-  lightCard: "#FFFFFF",
-  lightText: "#181818",
-  lightMuted: "#777777",
-  lightBorder: "rgba(245, 184, 61, 0.15)",
-
-  darkBackground: "#121212",
-  darkCard: "#1E1E1E",
-  darkText: "#FFFFFF",
-  darkMuted: "#AAAAAA",
-  darkBorder: "rgba(255,255,255,0.08)",
-
-  red: "#EF4444",
-};
-
-// ============================================================
 // NOTIFICATION SCREEN
 // ============================================================
 
 const NotificationScreen = () => {
   const router = useRouter();
 
-  const { isDarkMode } = useApp();
+  // ==========================================================
+  // GLOBAL THEME
+  // ==========================================================
+
+  const { isDarkMode, colors } = useApp();
 
   // ==========================================================
   // STATE
@@ -68,36 +52,26 @@ const NotificationScreen = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Notification IDs currently being marked as read.
-  const [markingAsRead, setMarkingAsRead] = useState(new Set());
+  const [markingAsRead, setMarkingAsRead] = useState(
+    new Set()
+  );
 
   // Notification IDs currently being deleted.
-  const [deletingIds, setDeletingIds] = useState(new Set());
+  const [deletingIds, setDeletingIds] = useState(
+    new Set()
+  );
 
   const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   // ==========================================================
-  // THEME
+  // THEME COLORS
   // ==========================================================
 
-  const backgroundColor = isDarkMode
-    ? COLORS.darkBackground
-    : COLORS.lightBackground;
-
-  const cardColor = isDarkMode
-    ? COLORS.darkCard
-    : COLORS.lightCard;
-
-  const textColor = isDarkMode
-    ? COLORS.darkText
-    : COLORS.lightText;
-
-  const mutedColor = isDarkMode
-    ? COLORS.darkMuted
-    : COLORS.lightMuted;
-
-  const borderColor = isDarkMode
-    ? COLORS.darkBorder
-    : COLORS.lightBorder;
+  const backgroundColor = colors.background;
+  const cardColor = colors.card;
+  const textColor = colors.foreground;
+  const mutedColor = colors.mutedForeground;
+  const borderColor = colors.border;
 
   // ==========================================================
   // GET ACCESS TOKEN
@@ -105,7 +79,9 @@ const NotificationScreen = () => {
 
   const getAccessToken = async () => {
     try {
-      const token = await AsyncStorage.getItem("access_token");
+      const token = await AsyncStorage.getItem(
+        "access_token"
+      );
 
       if (!token || !token.trim()) {
         console.log(
@@ -170,7 +146,8 @@ const NotificationScreen = () => {
           }
         );
 
-        const responseText = await response.text();
+        const responseText =
+          await response.text();
 
         console.log(
           "NOTIFICATIONS STATUS:",
@@ -425,7 +402,6 @@ const NotificationScreen = () => {
         response.status === 200 ||
         response.status === 204
       ) {
-        // Update locally immediately.
         setNotifications((previous) =>
           previous.map((item) =>
             item.id === notificationId
@@ -784,7 +760,6 @@ const NotificationScreen = () => {
       return "";
     }
 
-    // Keep backend value if it cannot be parsed.
     const date = new Date(dateValue);
 
     if (Number.isNaN(date.getTime())) {
@@ -850,19 +825,15 @@ const NotificationScreen = () => {
                 styles.notificationIcon,
                 {
                   backgroundColor: isRead
-                    ? isDarkMode
-                      ? "#343434"
-                      : "#E5E7EB"
-                    : isDarkMode
-                    ? "rgba(249,115,22,0.20)"
-                    : "#FFF0E1",
+                    ? colors.muted
+                    : colors.backgroundSelected,
                 },
               ]}
             >
               {isMarking ? (
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.orange}
+                  color={colors.orange}
                 />
               ) : (
                 <Ionicons
@@ -875,19 +846,22 @@ const NotificationScreen = () => {
                   color={
                     isRead
                       ? mutedColor
-                      : COLORS.orange
+                      : colors.orange
                   }
                 />
               )}
             </View>
 
             {/* Unread dot */}
+
             {!isRead && (
               <View
                 style={[
                   styles.unreadDot,
                   {
                     borderColor: cardColor,
+                    backgroundColor:
+                      colors.destructive,
                   },
                 ]}
               />
@@ -898,7 +872,9 @@ const NotificationScreen = () => {
               TEXT
           ================================================== */}
 
-          <View style={styles.notificationContent}>
+          <View
+            style={styles.notificationContent}
+          >
             <Text
               numberOfLines={2}
               ellipsizeMode="tail"
@@ -922,9 +898,7 @@ const NotificationScreen = () => {
                 style={[
                   styles.notificationBody,
                   {
-                    color: isDarkMode
-                      ? "#D0D0D0"
-                      : "#333333",
+                    color: colors.textSecondary,
                   },
                 ]}
               >
@@ -948,12 +922,13 @@ const NotificationScreen = () => {
             )}
 
             {/* Unread label */}
+
             {!isRead && (
               <Text
                 style={[
                   styles.unreadLabel,
                   {
-                    color: COLORS.orange,
+                    color: colors.orange,
                   },
                 ]}
               >
@@ -982,13 +957,13 @@ const NotificationScreen = () => {
           {isDeleting ? (
             <ActivityIndicator
               size="small"
-              color={COLORS.red}
+              color={colors.destructive}
             />
           ) : (
             <Ionicons
               name="trash-outline"
               size={21}
-              color={COLORS.red}
+              color={colors.destructive}
             />
           )}
         </TouchableOpacity>
@@ -1011,20 +986,15 @@ const NotificationScreen = () => {
           style={[
             styles.emptyIconContainer,
             {
-              backgroundColor: isDarkMode
-                ? "#292929"
-                : "#FFF0E1",
+              backgroundColor:
+                colors.backgroundSelected,
             },
           ]}
         >
           <Ionicons
             name="notifications-off-outline"
             size={58}
-            color={
-              isDarkMode
-                ? "#777777"
-                : "#B8B8B8"
-            }
+            color={mutedColor}
           />
         </View>
 
@@ -1080,16 +1050,15 @@ const NotificationScreen = () => {
           },
         ]}
       >
-        {/* Back */}
+        {/* BACK */}
+
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={handleBack}
           style={[
             styles.headerButton,
             {
-              backgroundColor: isDarkMode
-                ? "#292929"
-                : "#F1F1F1",
+              backgroundColor: colors.muted,
             },
           ]}
           accessibilityRole="button"
@@ -1102,7 +1071,8 @@ const NotificationScreen = () => {
           />
         </TouchableOpacity>
 
-        {/* Title */}
+        {/* TITLE */}
+
         <Text
           style={[
             styles.headerTitle,
@@ -1114,7 +1084,8 @@ const NotificationScreen = () => {
           Notifications
         </Text>
 
-        {/* Delete all */}
+        {/* DELETE ALL */}
+
         <TouchableOpacity
           activeOpacity={0.7}
           disabled={
@@ -1126,8 +1097,9 @@ const NotificationScreen = () => {
             styles.headerButton,
             {
               backgroundColor: isDarkMode
-                ? "#292929"
+                ? colors.muted
                 : "#FFF1F1",
+
               opacity:
                 notifications.length === 0 ||
                 isDeletingAll
@@ -1141,13 +1113,13 @@ const NotificationScreen = () => {
           {isDeletingAll ? (
             <ActivityIndicator
               size="small"
-              color={COLORS.red}
+              color={colors.destructive}
             />
           ) : (
             <Ionicons
               name="trash-outline"
               size={21}
-              color={COLORS.red}
+              color={colors.destructive}
             />
           )}
         </TouchableOpacity>
@@ -1177,12 +1149,15 @@ const NotificationScreen = () => {
         backgroundColor={cardColor}
       />
 
-      {/* Header */}
+      {/* ====================================================
+          HEADER
+      ==================================================== */}
+
       {renderHeader()}
 
-      {/* ======================================================
+      {/* ====================================================
           LOADING
-      ====================================================== */}
+      ==================================================== */}
 
       {isLoading ? (
         <View
@@ -1195,7 +1170,7 @@ const NotificationScreen = () => {
         >
           <ActivityIndicator
             size="large"
-            color={COLORS.orange}
+            color={colors.orange}
           />
 
           <Text
@@ -1210,9 +1185,9 @@ const NotificationScreen = () => {
           </Text>
         </View>
       ) : (
-        /* ====================================================
+        /* ==================================================
            NOTIFICATION LIST
-        ==================================================== */
+        ================================================== */
 
         <FlatList
           data={notifications}
@@ -1231,8 +1206,8 @@ const NotificationScreen = () => {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={COLORS.orange}
-              colors={[COLORS.orange]}
+              tintColor={colors.orange}
+              colors={[colors.orange]}
               progressBackgroundColor={
                 cardColor
               }
@@ -1252,6 +1227,10 @@ const NotificationScreen = () => {
 // ============================================================
 
 const styles = StyleSheet.create({
+  // ==========================================================
+  // CONTAINER
+  // ==========================================================
+
   container: {
     flex: 1,
   },
@@ -1277,11 +1256,13 @@ const styles = StyleSheet.create({
 
   headerButton: {
     width: 42,
+
     height: 42,
 
     borderRadius: 13,
 
     alignItems: "center",
+
     justifyContent: "center",
   },
 
@@ -1356,6 +1337,7 @@ const styles = StyleSheet.create({
 
     shadowOffset: {
       width: 0,
+
       height: 2,
     },
 
@@ -1416,8 +1398,6 @@ const styles = StyleSheet.create({
     height: 12,
 
     borderRadius: 6,
-
-    backgroundColor: COLORS.red,
 
     borderWidth: 2,
   },
@@ -1522,4 +1502,3 @@ const styles = StyleSheet.create({
 });
 
 export default NotificationScreen;
-

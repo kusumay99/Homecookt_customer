@@ -22,10 +22,23 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useApp } from "./_layout";
+
+// IMPORTANT:
+// Change this import path if your AppContext file is in another folder.
 
 const BASE_URL = "https://api.homecookt.com";
 
 const CartScreen = forwardRef((props, ref) => {
+  // ============================================================
+  // THEME
+  // ============================================================
+
+  const {
+    isDarkMode,
+    colors: contextColors,
+  } = useApp();
+
   // ============================================================
   // STATE
   // ============================================================
@@ -37,7 +50,6 @@ const CartScreen = forwardRef((props, ref) => {
   const [deliveryFee, setDeliveryFee] = useState(0);
   const [finalTotal, setFinalTotal] = useState(0);
 
-  // food_id -> image URL
   const [foodImageMap, setFoodImageMap] = useState({});
 
   const [isLoading, setIsLoading] = useState(false);
@@ -46,24 +58,48 @@ const CartScreen = forwardRef((props, ref) => {
   const [removingId, setRemovingId] = useState(null);
   const [isClearing, setIsClearing] = useState(false);
 
-  const isDark = false;
-
   // ============================================================
-  // COLORS
+  // THEME COLORS
   // ============================================================
 
   const colors = {
-    background: isDark ? "#121212" : "#F7F7F7",
-    card: isDark ? "#1E1E1E" : "#FFFFFF",
-    foreground: isDark ? "#FFFFFF" : "#222222",
-    muted: isDark ? "#AAAAAA" : "#777777",
-    border: isDark ? "#333333" : "#E5E5E5",
+    background: isDarkMode ? "#121212" : "#F7F7F7",
+
+    card: isDarkMode ? "#1E1E1E" : "#FFFFFF",
+
+    foreground: isDarkMode ? "#FFFFFF" : "#222222",
+
+    muted: isDarkMode ? "#AAAAAA" : "#777777",
+
+    border: isDarkMode ? "#333333" : "#E5E5E5",
+
+    inputBackground: isDarkMode ? "#252525" : "#FFFFFF",
+
+    secondaryBackground: isDarkMode
+      ? "#252525"
+      : "#FFF2E8",
+
+    quantityBackground: isDarkMode
+      ? "#2A2A2A"
+      : "#FFFFFF",
 
     orange: "#FF7A00",
+
+    orangeDark: "#E86600",
+
     red: "#E53935",
+
     green: "#2E7D32",
 
-    imagePlaceholder: isDark ? "#333333" : "#EEEEEE",
+    white: "#FFFFFF",
+
+    imagePlaceholder: isDarkMode
+      ? "#333333"
+      : "#EEEEEE",
+
+    shadow: isDarkMode
+      ? "#000000"
+      : "#000000",
   };
 
   // ============================================================
@@ -83,29 +119,32 @@ const CartScreen = forwardRef((props, ref) => {
       const token =
         values.find(
           ([key, value]) =>
-            key === "access_token" &&
-            value
+            key === "access_token" && value
         )?.[1] ||
         values.find(
           ([key, value]) =>
-            key === "accessToken" &&
-            value
+            key === "accessToken" && value
         )?.[1] ||
         values.find(
           ([key, value]) =>
-            key === "token" &&
-            value
+            key === "token" && value
         )?.[1] ||
         null;
 
       console.log(
         "CART TOKEN =>",
-        token ? "Token available" : "No token found"
+        token
+          ? "Token available"
+          : "No token found"
       );
 
       return token;
     } catch (error) {
-      console.log("GET TOKEN ERROR:", error);
+      console.log(
+        "GET TOKEN ERROR:",
+        error
+      );
+
       return null;
     }
   }, []);
@@ -120,10 +159,11 @@ const CartScreen = forwardRef((props, ref) => {
     return {
       Accept: "application/json",
       "Content-Type": "application/json",
+
       ...(token
         ? {
-            Authorization: `Bearer ${token}`,
-          }
+          Authorization: `Bearer ${token}`,
+        }
         : {}),
     };
   }, [getToken]);
@@ -132,63 +172,63 @@ const CartScreen = forwardRef((props, ref) => {
   // NORMALIZE IMAGE
   // ============================================================
 
-  const normalizeImageUrl = useCallback((image) => {
-    if (!image) {
-      return "";
-    }
-
-    // Array of images
-    if (Array.isArray(image)) {
-      for (const item of image) {
-        const normalized = normalizeImageUrl(item);
-
-        if (normalized) {
-          return normalized;
-        }
+  const normalizeImageUrl = useCallback(
+    (image) => {
+      if (!image) {
+        return "";
       }
 
-      return "";
-    }
+      if (Array.isArray(image)) {
+        for (const item of image) {
+          const normalized =
+            normalizeImageUrl(item);
 
-    // Object image
-    if (typeof image === "object") {
-      return normalizeImageUrl(
-        image?.url ||
+          if (normalized) {
+            return normalized;
+          }
+        }
+
+        return "";
+      }
+
+      if (typeof image === "object") {
+        return normalizeImageUrl(
+          image?.url ||
           image?.uri ||
           image?.image_url ||
           image?.image ||
           image?.src
-      );
-    }
+        );
+      }
 
-    if (typeof image !== "string") {
-      return "";
-    }
+      if (typeof image !== "string") {
+        return "";
+      }
 
-    const trimmed = image.trim();
+      const trimmed = image.trim();
 
-    if (!trimmed) {
-      return "";
-    }
+      if (!trimmed) {
+        return "";
+      }
 
-    // Already complete URL
-    if (
-      trimmed.startsWith("http://") ||
-      trimmed.startsWith("https://")
-    ) {
-      return trimmed;
-    }
+      if (
+        trimmed.startsWith("http://") ||
+        trimmed.startsWith("https://")
+      ) {
+        return trimmed;
+      }
 
-    // Relative URL
-    if (trimmed.startsWith("/")) {
-      return `${BASE_URL}${trimmed}`;
-    }
+      if (trimmed.startsWith("/")) {
+        return `${BASE_URL}${trimmed}`;
+      }
 
-    return `${BASE_URL}/${trimmed}`;
-  }, []);
+      return `${BASE_URL}/${trimmed}`;
+    },
+    []
+  );
 
   // ============================================================
-  // EXTRACT IMAGE FROM FOOD/CART OBJECT
+  // EXTRACT FOOD IMAGE
   // ============================================================
 
   const extractFoodImage = useCallback(
@@ -203,11 +243,13 @@ const CartScreen = forwardRef((props, ref) => {
         item?.image,
         item?.image_url,
         item?.image_urls,
+
         item?.food?.food_photo,
         item?.food?.food_image,
         item?.food?.image,
         item?.food?.image_url,
         item?.food?.image_urls,
+
         item?.foodItem?.food_photo,
         item?.foodItem?.food_image,
         item?.foodItem?.image,
@@ -216,7 +258,8 @@ const CartScreen = forwardRef((props, ref) => {
       ];
 
       for (const image of possibleImages) {
-        const normalized = normalizeImageUrl(image);
+        const normalized =
+          normalizeImageUrl(image);
 
         if (normalized) {
           return normalized;
@@ -232,56 +275,54 @@ const CartScreen = forwardRef((props, ref) => {
   // GET FOOD ID
   // ============================================================
 
-  const getFoodId = useCallback((item) => {
-    if (!item) {
-      return null;
-    }
+  const getFoodId = useCallback(
+    (item) => {
+      if (!item) {
+        return null;
+      }
 
-    return (
-      item?.food_id ??
-      item?.foodId ??
-      item?.food?.food_id ??
-      item?.food?.id ??
-      item?.foodItem?.food_id ??
-      item?.foodItem?.id ??
-      item?.id ??
-      null
-    );
-  }, []);
+      return (
+        item?.food_id ??
+        item?.foodId ??
+        item?.food?.food_id ??
+        item?.food?.id ??
+        item?.foodItem?.food_id ??
+        item?.foodItem?.id ??
+        item?.id ??
+        null
+      );
+    },
+    []
+  );
 
   // ============================================================
   // FETCH FOOD IMAGES
-  //
-  // Cart API sometimes returns:
-  // food_photo: null
-  //
-  // So we fetch the food list and create:
-  //
-  // {
-  //   "43": "https://....jpg",
-  //   "45": "https://....jpg"
-  // }
   // ============================================================
 
   const fetchFoodImages = useCallback(
     async (items, token) => {
       try {
-        if (!Array.isArray(items) || items.length === 0) {
+        if (
+          !Array.isArray(items) ||
+          items.length === 0
+        ) {
           return;
         }
 
         const missingFoodIds = items
-          .filter((item) => {
-            const directImage =
-              extractFoodImage(item);
-
-            return !directImage;
-          })
-          .map((item) => getFoodId(item))
+          .filter(
+            (item) =>
+              !extractFoodImage(item)
+          )
+          .map((item) =>
+            getFoodId(item)
+          )
           .filter(Boolean)
           .map(String);
 
-        if (missingFoodIds.length === 0) {
+        if (
+          missingFoodIds.length === 0
+        ) {
           return;
         }
 
@@ -294,12 +335,15 @@ const CartScreen = forwardRef((props, ref) => {
           `${BASE_URL}/api/v1/get/fooditems`,
           {
             method: "GET",
+
             headers: {
-              Accept: "application/json",
+              Accept:
+                "application/json",
+
               ...(token
                 ? {
-                    Authorization: `Bearer ${token}`,
-                  }
+                  Authorization: `Bearer ${token}`,
+                }
                 : {}),
             },
           }
@@ -324,6 +368,7 @@ const CartScreen = forwardRef((props, ref) => {
             "FOOD ITEMS JSON ERROR:",
             error
           );
+
           return;
         }
 
@@ -332,10 +377,10 @@ const CartScreen = forwardRef((props, ref) => {
             "FOOD ITEMS IMAGE API ERROR:",
             responseText
           );
+
           return;
         }
 
-        // Support different possible API response formats
         let foods = [];
 
         if (Array.isArray(data)) {
@@ -397,18 +442,16 @@ const CartScreen = forwardRef((props, ref) => {
           }
         });
 
-        console.log(
-          "FOOD IMAGE MAP:",
-          newImageMap
-        );
-
         if (
-          Object.keys(newImageMap).length > 0
+          Object.keys(newImageMap)
+            .length > 0
         ) {
-          setFoodImageMap((previous) => ({
-            ...previous,
-            ...newImageMap,
-          }));
+          setFoodImageMap(
+            (previous) => ({
+              ...previous,
+              ...newImageMap,
+            })
+          );
         }
       } catch (error) {
         console.log(
@@ -421,12 +464,11 @@ const CartScreen = forwardRef((props, ref) => {
   );
 
   // ============================================================
-  // GET IMAGE URL FOR CART ITEM
+  // GET IMAGE URL
   // ============================================================
 
   const getImageUrl = useCallback(
     (item) => {
-      // First use image directly returned by cart API
       const directImage =
         extractFoodImage(item);
 
@@ -434,22 +476,19 @@ const CartScreen = forwardRef((props, ref) => {
         return directImage;
       }
 
-      // Then use food list mapping
-      const foodId = getFoodId(item);
+      const foodId =
+        getFoodId(item);
 
       if (foodId !== null) {
         const mappedImage =
-          foodImageMap[String(foodId)];
+          foodImageMap[
+          String(foodId)
+          ];
 
         if (mappedImage) {
           return mappedImage;
         }
       }
-
-      console.log(
-        "NO CART IMAGE FOUND FOR ITEM:",
-        item
-      );
 
       return "";
     },
@@ -471,25 +510,30 @@ const CartScreen = forwardRef((props, ref) => {
           setIsLoading(true);
         }
 
-        const token = await getToken();
+        const token =
+          await getToken();
 
         const headers = {
-          Accept: "application/json",
-          "Content-Type": "application/json",
+          Accept:
+            "application/json",
+          "Content-Type":
+            "application/json",
+
           ...(token
             ? {
-                Authorization: `Bearer ${token}`,
-              }
+              Authorization: `Bearer ${token}`,
+            }
             : {}),
         };
 
-        const response = await fetch(
-          `${BASE_URL}/api/v1/cart`,
-          {
-            method: "GET",
-            headers,
-          }
-        );
+        const response =
+          await fetch(
+            `${BASE_URL}/api/v1/cart`,
+            {
+              method: "GET",
+              headers,
+            }
+          );
 
         const responseText =
           await response.text();
@@ -497,11 +541,6 @@ const CartScreen = forwardRef((props, ref) => {
         console.log(
           "GET CART STATUS:",
           response.status
-        );
-
-        console.log(
-          "GET CART BODY:",
-          responseText
         );
 
         let data = {};
@@ -518,31 +557,35 @@ const CartScreen = forwardRef((props, ref) => {
         }
 
         if (response.ok) {
-          const items = Array.isArray(
-            data?.items
-          )
-            ? data.items
-            : Array.isArray(data)
-            ? data
-            : [];
+          const items =
+            Array.isArray(
+              data?.items
+            )
+              ? data.items
+              : Array.isArray(data)
+                ? data
+                : [];
 
-          const subtotal = Number(
-            data?.cart_summary
-              ?.grand_total ??
+          const subtotal =
+            Number(
+              data?.cart_summary
+                ?.grand_total ??
               data?.grand_total ??
               data?.subtotal ??
               0
-          );
+            );
 
           const apiDeliveryFee =
             Number(
-              data?.kitchen?.delivery_fee ??
-                data?.delivery_fee ??
-                0
+              data?.kitchen
+                ?.delivery_fee ??
+              data?.delivery_fee ??
+              0
             );
 
           const totalWithDelivery =
-            subtotal + apiDeliveryFee;
+            subtotal +
+            apiDeliveryFee;
 
           setCartItems(items);
           setGrandTotal(subtotal);
@@ -553,33 +596,6 @@ const CartScreen = forwardRef((props, ref) => {
             totalWithDelivery
           );
 
-          console.log(
-            "================================"
-          );
-          console.log(
-            "CART SUCCESS"
-          );
-          console.log(
-            "Cart Items:",
-            items
-          );
-          console.log(
-            "Subtotal:",
-            subtotal
-          );
-          console.log(
-            "Delivery Fee:",
-            apiDeliveryFee
-          );
-          console.log(
-            "Final Total:",
-            totalWithDelivery
-          );
-          console.log(
-            "================================"
-          );
-
-          // Load missing food images
           await fetchFoodImages(
             items,
             token
@@ -587,10 +603,6 @@ const CartScreen = forwardRef((props, ref) => {
         } else if (
           response.status === 401
         ) {
-          console.log(
-            "CART 401 - TOKEN EXPIRED"
-          );
-
           setCartItems([]);
           setCartCount(0);
           setGrandTotal(0);
@@ -603,23 +615,19 @@ const CartScreen = forwardRef((props, ref) => {
             [
               {
                 text: "OK",
-                onPress: () => {
+                onPress: () =>
                   router.replace(
                     "/Login_screen"
-                  );
-                },
+                  ),
               },
             ]
           );
         } else {
-          const errorMessage =
-            data?.detail ||
-            data?.message ||
-            `Failed to load cart (${response.status})`;
-
           Alert.alert(
             "Cart Error",
-            errorMessage
+            data?.detail ||
+            data?.message ||
+            `Failed to load cart (${response.status})`
           );
         }
       } catch (error) {
@@ -680,22 +688,12 @@ const CartScreen = forwardRef((props, ref) => {
         }
 
         if (response.ok) {
-          const count = Number(
-            data?.count ?? 0
-          );
+          const count =
+            Number(
+              data?.count ?? 0
+            );
 
           setCartCount(count);
-
-          console.log(
-            "Cart Count:",
-            count
-          );
-        } else if (
-          response.status === 401
-        ) {
-          console.log(
-            "CART COUNT 401"
-          );
         }
       } catch (error) {
         console.log(
@@ -732,7 +730,7 @@ const CartScreen = forwardRef((props, ref) => {
     ]);
 
   // ============================================================
-  // EXPOSE REFRESH CART TO MAIN NAVIGATION
+  // EXPOSE REFRESH CART
   // ============================================================
 
   useImperativeHandle(
@@ -833,11 +831,6 @@ const CartScreen = forwardRef((props, ref) => {
         } else if (
           response.status === 401
         ) {
-          Alert.alert(
-            "Session Expired",
-            "Please login again."
-          );
-
           router.replace(
             "/Login_screen"
           );
@@ -845,8 +838,8 @@ const CartScreen = forwardRef((props, ref) => {
           Alert.alert(
             "Error",
             data?.detail ||
-              data?.message ||
-              `Failed to clear cart (${response.status})`
+            data?.message ||
+            `Failed to clear cart (${response.status})`
           );
         }
       } catch (error) {
@@ -858,7 +851,7 @@ const CartScreen = forwardRef((props, ref) => {
         Alert.alert(
           "Error",
           error?.message ||
-            "Unable to clear cart."
+          "Unable to clear cart."
         );
       } finally {
         setIsClearing(false);
@@ -891,10 +884,6 @@ const CartScreen = forwardRef((props, ref) => {
       ]
     );
   };
-
-  // ============================================================
-  // PERFORM REMOVE
-  // ============================================================
 
   const performRemoveCartItem =
     async (cartId) => {
@@ -959,8 +948,8 @@ const CartScreen = forwardRef((props, ref) => {
           Alert.alert(
             "Error",
             data?.detail ||
-              data?.message ||
-              `Failed to remove item (${response.status})`
+            data?.message ||
+            `Failed to remove item (${response.status})`
           );
         }
       } catch (error) {
@@ -972,7 +961,7 @@ const CartScreen = forwardRef((props, ref) => {
         Alert.alert(
           "Error",
           error?.message ||
-            "Unable to remove item."
+          "Unable to remove item."
         );
       } finally {
         setRemovingId(null);
@@ -1051,8 +1040,8 @@ const CartScreen = forwardRef((props, ref) => {
           Alert.alert(
             "Error",
             data?.detail ||
-              data?.message ||
-              `Failed to update cart (${response.status})`
+            data?.message ||
+            `Failed to update cart (${response.status})`
           );
         }
       } catch (error) {
@@ -1064,7 +1053,7 @@ const CartScreen = forwardRef((props, ref) => {
         Alert.alert(
           "Error",
           error?.message ||
-            "Unable to update quantity."
+          "Unable to update quantity."
         );
       } finally {
         setUpdatingId(null);
@@ -1075,9 +1064,7 @@ const CartScreen = forwardRef((props, ref) => {
   // FORMAT PRICE
   // ============================================================
 
-  const formatPrice = (
-    value
-  ) => {
+  const formatPrice = (value) => {
     const number =
       Number(value) || 0;
 
@@ -1168,6 +1155,7 @@ const CartScreen = forwardRef((props, ref) => {
           {
             backgroundColor:
               colors.card,
+
             borderColor:
               colors.border,
           },
@@ -1176,7 +1164,9 @@ const CartScreen = forwardRef((props, ref) => {
         {renderFoodImage(item)}
 
         <View
-          style={styles.itemContent}
+          style={
+            styles.itemContent
+          }
         >
           <Text
             style={[
@@ -1214,6 +1204,9 @@ const CartScreen = forwardRef((props, ref) => {
               style={[
                 styles.quantityButton,
                 {
+                  backgroundColor:
+                    colors.quantityBackground,
+
                   borderColor:
                     colors.border,
                 },
@@ -1272,6 +1265,9 @@ const CartScreen = forwardRef((props, ref) => {
               style={[
                 styles.quantityButton,
                 {
+                  backgroundColor:
+                    colors.quantityBackground,
+
                   borderColor:
                     colors.border,
                 },
@@ -1350,282 +1346,277 @@ const CartScreen = forwardRef((props, ref) => {
   // EMPTY CART
   // ============================================================
 
-  const renderEmptyCart =
-    () => {
-      if (isLoading) {
-        return (
-          <View
-            style={
-              styles.centerContainer
-            }
-          >
-            <ActivityIndicator
-              size="large"
-              color={
-                colors.orange
-              }
-            />
-
-            <Text
-              style={[
-                styles.loadingText,
-                {
-                  color:
-                    colors.muted,
-                },
-              ]}
-            >
-              Loading cart...
-            </Text>
-          </View>
-        );
-      }
-
+  const renderEmptyCart = () => {
+    if (isLoading) {
       return (
         <View
           style={
-            styles.emptyContainer
+            styles.centerContainer
           }
         >
-          <View
-            style={[
-              styles.emptyIconContainer,
-              {
-                backgroundColor:
-                  isDark
-                    ? "#2A2A2A"
-                    : "#FFF2E8",
-              },
-            ]}
-          >
-            <Ionicons
-              name="cart-outline"
-              size={48}
-              color={
-                colors.orange
-              }
-            />
-          </View>
+          <ActivityIndicator
+            size="large"
+            color={
+              colors.orange
+            }
+          />
 
           <Text
             style={[
-              styles.emptyTitle,
-              {
-                color:
-                  colors.foreground,
-              },
-            ]}
-          >
-            Your cart is empty
-          </Text>
-
-          <Text
-            style={[
-              styles.emptySubtitle,
+              styles.loadingText,
               {
                 color:
                   colors.muted,
               },
             ]}
           >
-            Add some delicious food
-            to your cart
+            Loading cart...
           </Text>
-
-          <TouchableOpacity
-            style={[
-              styles.shopButton,
-              {
-                backgroundColor:
-                  colors.orange,
-              },
-            ]}
-            activeOpacity={0.85}
-            onPress={() => {
-              router.replace(
-                "/Main_navigation"
-              );
-            }}
-          >
-            <Text
-              style={
-                styles.shopButtonText
-              }
-            >
-              Browse Food
-            </Text>
-          </TouchableOpacity>
         </View>
       );
-    };
+    }
+
+    return (
+      <View
+        style={
+          styles.emptyContainer
+        }
+      >
+        <View
+          style={[
+            styles.emptyIconContainer,
+            {
+              backgroundColor:
+                colors.secondaryBackground,
+            },
+          ]}
+        >
+          <Ionicons
+            name="cart-outline"
+            size={48}
+            color={colors.orange}
+          />
+        </View>
+
+        <Text
+          style={[
+            styles.emptyTitle,
+            {
+              color:
+                colors.foreground,
+            },
+          ]}
+        >
+          Your cart is empty
+        </Text>
+
+        <Text
+          style={[
+            styles.emptySubtitle,
+            {
+              color:
+                colors.muted,
+            },
+          ]}
+        >
+          Add some delicious food
+          to your cart
+        </Text>
+
+        <TouchableOpacity
+          style={[
+            styles.shopButton,
+            {
+              backgroundColor:
+                colors.orange,
+            },
+          ]}
+          activeOpacity={0.85}
+          onPress={() => {
+            router.replace(
+              "/Main_navigation"
+            );
+          }}
+        >
+          <Text
+            style={
+              styles.shopButtonText
+            }
+          >
+            Browse Food
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   // ============================================================
   // SUMMARY
   // ============================================================
 
-  const renderSummary =
-    () => {
-      if (
-        cartItems.length === 0
-      ) {
-        return null;
-      }
+  const renderSummary = () => {
+    if (cartItems.length === 0) {
+      return null;
+    }
 
-      return (
+    return (
+      <View
+        style={[
+          styles.summaryContainer,
+          {
+            backgroundColor:
+              colors.card,
+
+            borderTopColor:
+              colors.border,
+          },
+        ]}
+      >
+        <View
+          style={
+            styles.summaryRow
+          }
+        >
+          <Text
+            style={[
+              styles.summaryLabel,
+              {
+                color:
+                  colors.muted,
+              },
+            ]}
+          >
+            Subtotal
+          </Text>
+
+          <Text
+            style={[
+              styles.summaryValue,
+              {
+                color:
+                  colors.foreground,
+              },
+            ]}
+          >
+            {formatPrice(
+              grandTotal
+            )}
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.summaryRow
+          }
+        >
+          <Text
+            style={[
+              styles.summaryLabel,
+              {
+                color:
+                  colors.muted,
+              },
+            ]}
+          >
+            Delivery
+          </Text>
+
+          <Text
+            style={[
+              styles.summaryValue,
+              {
+                color:
+                  deliveryFee === 0
+                    ? colors.green
+                    : colors.foreground,
+              },
+            ]}
+          >
+            {deliveryFee === 0
+              ? "FREE"
+              : formatPrice(
+                deliveryFee
+              )}
+          </Text>
+        </View>
+
         <View
           style={[
-            styles.summaryContainer,
+            styles.divider,
             {
               backgroundColor:
-                colors.card,
-              borderTopColor:
                 colors.border,
             },
           ]}
+        />
+
+        <View
+          style={
+            styles.summaryRow
+          }
         >
-          <View
-            style={
-              styles.summaryRow
-            }
-          >
-            <Text
-              style={[
-                styles.summaryLabel,
-                {
-                  color:
-                    colors.muted,
-                },
-              ]}
-            >
-              Subtotal
-            </Text>
-
-            <Text
-              style={[
-                styles.summaryValue,
-                {
-                  color:
-                    colors.foreground,
-                },
-              ]}
-            >
-              {formatPrice(
-                grandTotal
-              )}
-            </Text>
-          </View>
-
-          <View
-            style={
-              styles.summaryRow
-            }
-          >
-            <Text
-              style={[
-                styles.summaryLabel,
-                {
-                  color:
-                    colors.muted,
-                },
-              ]}
-            >
-              Delivery
-            </Text>
-
-            <Text
-              style={[
-                styles.summaryValue,
-                {
-                  color:
-                    colors.foreground,
-                },
-              ]}
-            >
-              {deliveryFee === 0
-                ? "FREE"
-                : formatPrice(
-                    deliveryFee
-                  )}
-            </Text>
-          </View>
-
-          <View
+          <Text
             style={[
-              styles.divider,
+              styles.grandTotalLabel,
               {
-                backgroundColor:
-                  colors.border,
+                color:
+                  colors.foreground,
               },
             ]}
-          />
-
-          <View
-            style={
-              styles.summaryRow
-            }
           >
-            <Text
-              style={[
-                styles.grandTotalLabel,
-                {
-                  color:
-                    colors.foreground,
-                },
-              ]}
-            >
-              Grand Total
-            </Text>
+            Grand Total
+          </Text>
 
-            <Text
-              style={[
-                styles.grandTotalValue,
-                {
-                  color:
-                    colors.orange,
-                },
-              ]}
-            >
-              {formatPrice(
-                finalTotal
-              )}
-            </Text>
-          </View>
-
-          <TouchableOpacity
+          <Text
             style={[
-              styles.checkoutButton,
+              styles.grandTotalValue,
               {
-                backgroundColor:
+                color:
                   colors.orange,
               },
             ]}
-            activeOpacity={0.85}
-            onPress={() => {
-              router.push(
-                "/Checkout_screen"
-              );
-            }}
           >
-            <Text
-              style={
-                styles.checkoutButtonText
-              }
-            >
-              Proceed to Checkout
-            </Text>
-
-            <Ionicons
-              name="arrow-forward"
-              size={21}
-              color="#FFFFFF"
-              style={
-                styles.checkoutArrow
-              }
-            />
-          </TouchableOpacity>
+            {formatPrice(
+              finalTotal
+            )}
+          </Text>
         </View>
-      );
-    };
+
+        <TouchableOpacity
+          style={[
+            styles.checkoutButton,
+            {
+              backgroundColor:
+                colors.orange,
+            },
+          ]}
+          activeOpacity={0.85}
+          onPress={() => {
+            router.push(
+              "/Checkout_screen"
+            );
+          }}
+        >
+          <Text
+            style={
+              styles.checkoutButtonText
+            }
+          >
+            Proceed to Checkout
+          </Text>
+
+          <Ionicons
+            name="arrow-forward"
+            size={21}
+            color="#FFFFFF"
+            style={
+              styles.checkoutArrow
+            }
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   // ============================================================
   // MAIN UI
@@ -1649,7 +1640,7 @@ const CartScreen = forwardRef((props, ref) => {
     >
       <StatusBar
         barStyle={
-          isDark
+          isDarkMode
             ? "light-content"
             : "dark-content"
         }
@@ -1658,9 +1649,7 @@ const CartScreen = forwardRef((props, ref) => {
         }
       />
 
-      {/* ========================================================
-          HEADER
-      ======================================================== */}
+      {/* HEADER */}
 
       <View
         style={[
@@ -1668,6 +1657,7 @@ const CartScreen = forwardRef((props, ref) => {
           {
             backgroundColor:
               colors.background,
+
             borderBottomColor:
               colors.border,
           },
@@ -1711,8 +1701,6 @@ const CartScreen = forwardRef((props, ref) => {
           )}
         </View>
 
-        {/* RED TRASH / BUCKET BUTTON */}
-
         {cartItems.length > 0 && (
           <TouchableOpacity
             style={
@@ -1725,29 +1713,23 @@ const CartScreen = forwardRef((props, ref) => {
             {isClearing ? (
               <ActivityIndicator
                 size="small"
-                color={
-                  colors.red
-                }
+                color={colors.red}
               />
             ) : (
               <Ionicons
                 name="trash"
                 size={23}
-                color={
-                  colors.red
-                }
+                color={colors.red}
               />
             )}
           </TouchableOpacity>
         )}
       </View>
 
-      {/* ========================================================
-          BODY
-      ======================================================== */}
+      {/* BODY */}
 
       {cartItems.length === 0 &&
-      !isLoading ? (
+        !isLoading ? (
         renderEmptyCart()
       ) : (
         <View
@@ -1761,8 +1743,8 @@ const CartScreen = forwardRef((props, ref) => {
             ) =>
               String(
                 item?.cart_id ??
-                  item?.id ??
-                  index
+                item?.id ??
+                index
               )
             }
             renderItem={
@@ -1813,7 +1795,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent:
+      "space-between",
     borderBottomWidth:
       StyleSheet.hairlineWidth,
   },
@@ -1953,7 +1936,8 @@ const styles = StyleSheet.create({
     minWidth: 62,
     height: 88,
     alignItems: "flex-end",
-    justifyContent: "space-between",
+    justifyContent:
+      "space-between",
   },
 
   itemTotal: {
@@ -1972,7 +1956,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom:
-      Platform.OS === "ios" ? 12 : 18,
+      Platform.OS === "ios"
+        ? 12
+        : 18,
     borderTopWidth: 1,
 
     ...Platform.select({

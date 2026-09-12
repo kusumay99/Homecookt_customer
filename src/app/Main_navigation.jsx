@@ -13,19 +13,26 @@ import CartScreen from "./Cart_screen";
 import HomeScreen from "./Home_screen";
 import ProfileScreen from "./Profile_screen";
 
-const COLORS = {
-  orange: "#FF7A00",
-  grey: "#888888",
-  white: "#FFFFFF",
-  black: "#111111",
-  border: "#EEEEEE",
-};
+import { useApp } from "./_layout";
 
 export default function MainNavigation() {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Reference to Cart screen so we can refresh it
+  // ==========================================================
+  // GLOBAL THEME
+  // ==========================================================
+
+  const { isDarkMode, colors } = useApp();
+
+  // ==========================================================
+  // CART REFRESH
+  // ==========================================================
+
   const cartRef = useRef(null);
+
+  // ==========================================================
+  // TAB PRESS
+  // ==========================================================
 
   const onItemTapped = (index) => {
     console.log("TAB PRESSED:", index);
@@ -46,40 +53,74 @@ export default function MainNavigation() {
     }
   };
 
-  // Render selected screen
+  // ==========================================================
+  // RENDER SELECTED SCREEN
+  // ==========================================================
+
   const renderScreen = () => {
     switch (selectedIndex) {
       case 0:
         return (
-          <View style={styles.screen}>
+          <View
+            style={[
+              styles.screen,
+              {
+                backgroundColor: colors.background,
+              },
+            ]}
+          >
             <HomeScreen />
           </View>
         );
 
       case 1:
         return (
-          <View style={styles.screen}>
+          <View
+            style={[
+              styles.screen,
+              {
+                backgroundColor: colors.background,
+              },
+            ]}
+          >
             <CartScreen ref={cartRef} />
           </View>
         );
 
       case 2:
         return (
-          <View style={styles.screen}>
+          <View
+            style={[
+              styles.screen,
+              {
+                backgroundColor: colors.background,
+              },
+            ]}
+          >
             <ProfileScreen />
           </View>
         );
 
       default:
         return (
-          <View style={styles.screen}>
+          <View
+            style={[
+              styles.screen,
+              {
+                backgroundColor: colors.background,
+              },
+            ]}
+          >
             <HomeScreen />
           </View>
         );
     }
   };
 
-  // Bottom navigation button
+  // ==========================================================
+  // TAB BUTTON
+  // ==========================================================
+
   const TabButton = ({
     index,
     label,
@@ -93,11 +134,20 @@ export default function MainNavigation() {
         activeOpacity={0.75}
         onPress={() => onItemTapped(index)}
         style={styles.tabButton}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{
+          selected: isActive,
+        }}
       >
         <Ionicons
           name={isActive ? activeIcon : inactiveIcon}
           size={25}
-          color={isActive ? COLORS.orange : COLORS.grey}
+          color={
+            isActive
+              ? colors.orange
+              : colors.mutedForeground
+          }
         />
 
         <Text
@@ -105,8 +155,8 @@ export default function MainNavigation() {
             styles.tabLabel,
             {
               color: isActive
-                ? COLORS.orange
-                : COLORS.grey,
+                ? colors.orange
+                : colors.mutedForeground,
             },
           ]}
         >
@@ -116,18 +166,50 @@ export default function MainNavigation() {
     );
   };
 
-  return (
-    <View style={styles.container}>
+  // ==========================================================
+  // RENDER
+  // ==========================================================
 
-      {/* ================= BODY ================= */}
-      <View style={styles.body}>
+  return (
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
+      {/* ====================================================
+          BODY
+      ==================================================== */}
+
+      <View
+        style={[
+          styles.body,
+          {
+            backgroundColor: colors.background,
+          },
+        ]}
+      >
         {renderScreen()}
       </View>
 
-      {/* ================= BOTTOM NAVIGATION ================= */}
-      <View style={styles.bottomNavigation}>
+      {/* ====================================================
+          BOTTOM NAVIGATION
+      ==================================================== */}
 
+      <View
+        style={[
+          styles.bottomNavigation,
+          {
+            backgroundColor: colors.card,
+            borderTopColor: colors.border,
+            shadowColor: colors.shadowColor,
+          },
+        ]}
+      >
         {/* HOME */}
+
         <TabButton
           index={0}
           label="Home"
@@ -136,6 +218,7 @@ export default function MainNavigation() {
         />
 
         {/* CART */}
+
         <TabButton
           index={1}
           label="Cart"
@@ -144,32 +227,33 @@ export default function MainNavigation() {
         />
 
         {/* PROFILE */}
+
         <TabButton
           index={2}
           label="Profile"
           inactiveIcon="person-outline"
           activeIcon="person"
         />
-
       </View>
     </View>
   );
 }
 
+// ============================================================
+// STYLES
+// ============================================================
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
   },
 
   body: {
     flex: 1,
-    backgroundColor: COLORS.white,
   },
 
   screen: {
     flex: 1,
-    backgroundColor: COLORS.white,
   },
 
   bottomNavigation: {
@@ -181,13 +265,7 @@ const styles = StyleSheet.create({
 
     justifyContent: "space-around",
 
-    backgroundColor: COLORS.white,
-
     borderTopWidth: 1,
-
-    borderTopColor: COLORS.border,
-
-    shadowColor: "#000",
 
     shadowOffset: {
       width: 0,

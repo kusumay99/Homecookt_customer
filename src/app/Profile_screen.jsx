@@ -20,314 +20,289 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useApp } from "./_layout";
+
 // ============================================================
-// BASE URL
+// API
 // ============================================================
 
 const BASE_URL = "https://api.homecookt.com";
 
 // ============================================================
-// COLORS
-// ============================================================
-
-const COLORS = {
-  orange: "#F97316",
-  gold: "#FFC107",
-
-  background: "#F7F8FA",
-  darkBackground: "#121212",
-
-  card: "#FFFFFF",
-  darkCard: "#1E1E1E",
-
-  foreground: "#1F2937",
-  darkForeground: "#F5F5F5",
-
-  bodyText: "#374151",
-  darkBodyText: "#D1D5DB",
-
-  mutedForeground: "#6B7280",
-
-  red: "#EF4444",
-
-  white: "#FFFFFF",
-  black: "#000000",
-
-  border: "#E5E7EB",
-};
-
-// ============================================================
 // SCREEN
 // ============================================================
 
-const ProfileScreen = () => {
-  // ==========================================================
-  // STATE
-  // ==========================================================
+export default function ProfileScreen() {
+  const { isDarkMode, colors } = useApp();
 
   const [user, setUser] = useState(null);
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-
-  const [profileError, setProfileError] = useState("");
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   // ==========================================================
-  // DARK MODE
-  // ==========================================================
-
-  const isDark = false;
-
-  // ==========================================================
-  // THEME
-  // ==========================================================
-
-  const theme = {
-    background: isDark
-      ? COLORS.darkBackground
-      : COLORS.background,
-
-    card: isDark
-      ? COLORS.darkCard
-      : COLORS.card,
-
-    foreground: isDark
-      ? COLORS.darkForeground
-      : COLORS.foreground,
-
-    bodyText: isDark
-      ? COLORS.darkBodyText
-      : COLORS.bodyText,
-
-    muted: isDark
-      ? "#9CA3AF"
-      : COLORS.mutedForeground,
-
-    border: isDark
-      ? "#333333"
-      : COLORS.border,
-  };
-
-  // ==========================================================
-  // API ERROR MESSAGE
-  // ==========================================================
-
-  const getApiErrorMessage = (data, fallback) => {
-    if (!data) {
-      return fallback;
-    }
-
-    if (typeof data === "string") {
-      return data;
-    }
-
-    if (typeof data?.message === "string") {
-      return data.message;
-    }
-
-    if (typeof data?.detail === "string") {
-      return data.detail;
-    }
-
-    if (Array.isArray(data?.detail)) {
-      return data.detail
-        .map((item) => {
-          if (typeof item === "string") {
-            return item;
-          }
-
-          if (typeof item?.msg === "string") {
-            return item.msg;
-          }
-
-          return JSON.stringify(item);
-        })
-        .join(", ");
-    }
-
-    if (
-      data?.detail &&
-      typeof data.detail === "object"
-    ) {
-      return (
-        data.detail?.message ||
-        data.detail?.msg ||
-        JSON.stringify(data.detail)
-      );
-    }
-
-    if (typeof data?.error === "string") {
-      return data.error;
-    }
-
-    return fallback;
-  };
-
-  // ==========================================================
-  // GET STORED TOKEN
+  // AUTH HELPERS
   // ==========================================================
 
   const getStoredToken = async () => {
-    try {
-      const accessToken =
-        await AsyncStorage.getItem("access_token");
+    const keys = [
+      "access_token",
+      "accessToken",
+      "token",
+    ];
 
-      if (accessToken) {
-        return accessToken;
+    for (const key of keys) {
+      const value = await AsyncStorage.getItem(key);
+
+      if (value) {
+        return value;
       }
-
-      const accessToken2 =
-        await AsyncStorage.getItem("accessToken");
-
-      if (accessToken2) {
-        return accessToken2;
-      }
-
-      const token =
-        await AsyncStorage.getItem("token");
-
-      if (token) {
-        return token;
-      }
-
-      return null;
-    } catch (error) {
-      console.log(
-        "GET TOKEN ERROR =>",
-        error
-      );
-
-      return null;
     }
-  };
 
-  // ==========================================================
-  // CLEAR AUTH STORAGE
-  // ==========================================================
+    return null;
+  };
 
   const clearAuthStorage = async () => {
+    const keys = [
+      "access_token",
+      "accessToken",
+      "token",
+      "refresh_token",
+      "refreshToken",
+      "user_id",
+      "userId",
+      "email",
+      "name",
+      "image",
+      "user",
+      "profile",
+    ];
+
     try {
+      await AsyncStorage.multiRemove(keys);
+    } catch (storageError) {
       console.log(
-        "CLEARING AUTH STORAGE..."
+        "AUTH STORAGE CLEAR ERROR:",
+        storageError
       );
+    }
+  };
 
-      await AsyncStorage.multiRemove([
-        "access_token",
-        "accessToken",
-        "token",
-
-        "refresh_token",
-        "refreshToken",
-
-        "user_id",
-        "userId",
-
-        "email",
-        "name",
-        "image",
-
-        "user",
-        "profile",
-      ]);
-
-      console.log(
-        "AUTH STORAGE CLEARED"
-      );
-
-      // Verify important keys
-      const accessToken =
-        await AsyncStorage.getItem(
-          "access_token"
-        );
-
-      const refreshToken =
-        await AsyncStorage.getItem(
-          "refresh_token"
-        );
-
-      const token =
-        await AsyncStorage.getItem(
-          "token"
-        );
-
-      console.log(
-        "ACCESS TOKEN AFTER CLEAR =>",
-        accessToken
-      );
-
-      console.log(
-        "REFRESH TOKEN AFTER CLEAR =>",
-        refreshToken
-      );
-
-      console.log(
-        "TOKEN AFTER CLEAR =>",
-        token
-      );
+  const goToLogin = () => {
+    try {
+      router.replace("/Login_screen");
     } catch (error) {
-      console.log(
-        "CLEAR AUTH STORAGE ERROR =>",
-        error
-      );
-
-      throw error;
+      router.replace("/login");
     }
   };
 
   // ==========================================================
-  // GO TO LOGIN
+  // PROFILE IMAGE
   // ==========================================================
 
-  const goToLogin = () => {
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      "GOING TO LOGIN SCREEN"
-    );
-
-    console.log(
-      "LOGIN ROUTE => /Login_screen"
-    );
-
-    console.log(
-      "================================="
-    );
-
-    try {
-      router.replace("/Login_screen");
-
-      console.log(
-        "LOGIN NAVIGATION SENT"
-      );
-    } catch (error) {
-      console.log(
-        "LOGIN NAVIGATION ERROR =>",
-        error
-      );
-
-      try {
-        router.replace("/login");
-
-        console.log(
-          "FALLBACK LOGIN NAVIGATION SENT"
-        );
-      } catch (secondError) {
-        console.log(
-          "FALLBACK LOGIN NAVIGATION ERROR =>",
-          secondError
-        );
-
-        Alert.alert(
-          "Navigation Error",
-          "Unable to open the login screen."
-        );
-      }
+  const getProfileImage = (profileUser) => {
+    if (!profileUser) {
+      return null;
     }
+
+    const imageValue =
+      profileUser.profile_photo ||
+      profileUser.profilePhoto ||
+      profileUser.image ||
+      profileUser.photo ||
+      null;
+
+    if (!imageValue) {
+      return null;
+    }
+
+    if (
+      typeof imageValue === "string" &&
+      (imageValue.startsWith("http://") ||
+        imageValue.startsWith("https://"))
+    ) {
+      return imageValue;
+    }
+
+    if (typeof imageValue === "string") {
+      const cleanPath = imageValue.replace(/^\/+/, "");
+
+      return `${BASE_URL}/${cleanPath}`;
+    }
+
+    return null;
+  };
+
+  // ==========================================================
+  // PROFILE DATA NORMALIZATION
+  // ==========================================================
+
+  const normalizeProfile = (profileData) => {
+    if (!profileData) {
+      return null;
+    }
+
+    const profileUser =
+      profileData.profile ||
+      profileData.data ||
+      profileData.user ||
+      profileData;
+
+    if (!profileUser) {
+      return null;
+    }
+
+    const rolesValue =
+      profileUser.roles ||
+      profileUser.role ||
+      profileUser.primary_role ||
+      "";
+
+    let roleText = "";
+
+    if (Array.isArray(rolesValue)) {
+      roleText = rolesValue
+        .map((role) => String(role))
+        .filter(Boolean)
+        .join(", ");
+    } else {
+      roleText = String(rolesValue || "");
+    }
+
+    roleText = roleText
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (roleText) {
+      roleText = roleText
+        .split(" ")
+        .map(
+          (word) =>
+            word.charAt(0).toUpperCase() +
+            word.slice(1).toLowerCase()
+        )
+        .join(" ");
+    }
+
+    const verifiedValue =
+      profileUser.is_verified ??
+      profileUser.verified ??
+      false;
+
+    const isVerified =
+      verifiedValue === true ||
+      verifiedValue === 1 ||
+      verifiedValue === "1" ||
+      verifiedValue === "true";
+
+    const addressInfo =
+      profileUser.address_info ||
+      profileUser.addressInfo ||
+      {};
+
+    const orderStats =
+      profileUser.order_stats ||
+      profileUser.orderStats ||
+      {};
+
+    return {
+      ...profileUser,
+
+      id:
+        profileUser.user_id ||
+        profileUser.id ||
+        profileUser._id ||
+        null,
+
+      name:
+        profileUser.name ||
+        profileUser.full_name ||
+        profileUser.fullName ||
+        profileUser.username ||
+        "HomeCookt User",
+
+      email:
+        profileUser.email ||
+        "",
+
+      phone:
+        profileUser.phone_number ||
+        profileUser.phone ||
+        "",
+
+      role:
+        roleText || "Customer",
+
+      image:
+        getProfileImage(profileUser),
+
+      isVerified,
+
+      dob:
+        profileUser.dob ||
+        "",
+
+      gender:
+        profileUser.gender ||
+        "",
+
+      address: {
+        address:
+          addressInfo.address ||
+          addressInfo.street ||
+          "",
+
+        city:
+          addressInfo.city ||
+          "",
+
+        state:
+          addressInfo.state ||
+          "",
+
+        country:
+          addressInfo.country ||
+          "",
+
+        pincode:
+          addressInfo.pincode ||
+          addressInfo.zipcode ||
+          addressInfo.zip_code ||
+          "",
+      },
+
+      orderStats: {
+        totalOrders:
+          Number(
+            orderStats.total_orders ??
+              orderStats.totalOrders ??
+              0
+          ) || 0,
+
+        completedOrders:
+          Number(
+            orderStats.completed_orders ??
+              orderStats.completedOrders ??
+              0
+          ) || 0,
+
+        cancelledOrders:
+          Number(
+            orderStats.cancelled_orders ??
+              orderStats.cancelledOrders ??
+              0
+          ) || 0,
+
+        totalSpent:
+          Number(
+            orderStats.total_spent ??
+              orderStats.totalSpent ??
+              0
+          ) || 0,
+      },
+    };
   };
 
   // ==========================================================
@@ -335,244 +310,93 @@ const ProfileScreen = () => {
   // ==========================================================
 
   const getProfile = useCallback(
-    async (showLoader = true) => {
+    async (showLoading = true) => {
       try {
-        if (showLoader) {
-          setIsLoading(true);
+        if (showLoading) {
+          setProfileLoading(true);
         }
 
-        setProfileError("");
+        setError("");
 
-        console.log(
-          "================================="
-        );
-
-        console.log(
-          "PROFILE REQUEST STARTED"
-        );
-
-        const token =
-          await getStoredToken();
-
-        console.log(
-          "TOKEN EXISTS:",
-          !!token
-        );
-
-        console.log(
-          "================================="
-        );
-
-        // ------------------------------------------------------
-        // NO TOKEN
-        // ------------------------------------------------------
+        const token = await getStoredToken();
 
         if (!token) {
-          console.log(
-            "NO ACCESS TOKEN FOUND"
-          );
-
           setUser(null);
-
-          setProfileError(
-            "Your session has expired. Please login again."
-          );
-
+          setProfileLoading(false);
+          goToLogin();
           return;
         }
-
-        // ------------------------------------------------------
-        // PROFILE API
-        // ------------------------------------------------------
 
         const response = await fetch(
           `${BASE_URL}/api/v1/users/profile`,
           {
             method: "GET",
-
             headers: {
               Accept: "application/json",
-
-              Authorization:
-                `Bearer ${token}`,
+              Authorization: `Bearer ${token}`,
             },
           }
         );
-
-        console.log(
-          "PROFILE STATUS =>",
-          response.status
-        );
-
-        const responseText =
-          await response.text();
-
-        console.log(
-          "PROFILE BODY =>",
-          responseText
-        );
-
-        // ------------------------------------------------------
-        // PARSE RESPONSE
-        // ------------------------------------------------------
-
-        let decoded = {};
-
-        try {
-          decoded = responseText
-            ? JSON.parse(responseText)
-            : {};
-        } catch (error) {
-          console.log(
-            "PROFILE JSON ERROR =>",
-            error
-          );
-
-          setUser(null);
-
-          setProfileError(
-            "Invalid response received from the server."
-          );
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // AUTH ERROR
-        // ------------------------------------------------------
 
         if (
           response.status === 401 ||
           response.status === 403
         ) {
-          console.log(
-            "PROFILE AUTH FAILED =>",
-            response.status
-          );
-
+          await clearAuthStorage();
           setUser(null);
-
-          setProfileError(
-            "Your session has expired. Please login again."
-          );
-
+          goToLogin();
           return;
         }
 
-        // ------------------------------------------------------
-        // OTHER ERROR
-        // ------------------------------------------------------
+        const rawText = await response.text();
+
+        let decoded = null;
+
+        try {
+          decoded = rawText
+            ? JSON.parse(rawText)
+            : null;
+        } catch (parseError) {
+          console.log(
+            "PROFILE JSON PARSE ERROR:",
+            parseError
+          );
+        }
 
         if (!response.ok) {
-          const message =
-            getApiErrorMessage(
-              decoded,
-              "Unable to load profile."
-            );
-
-          setUser(null);
-
-          setProfileError(message);
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // EXTRACT PROFILE
-        // ------------------------------------------------------
-
-        let profileData = null;
-
-        if (
-          decoded &&
-          typeof decoded === "object" &&
-          decoded.profile &&
-          typeof decoded.profile === "object"
-        ) {
-          profileData = decoded.profile;
-        } else if (
-          decoded &&
-          typeof decoded === "object" &&
-          decoded.data &&
-          typeof decoded.data === "object"
-        ) {
-          profileData = decoded.data;
-        } else if (
-          decoded &&
-          typeof decoded === "object"
-        ) {
-          profileData = decoded;
-        }
-
-        console.log(
-          "PROFILE DATA =>",
-          profileData
-        );
-
-        // ------------------------------------------------------
-        // PROFILE NOT FOUND
-        // ------------------------------------------------------
-
-        if (
-          !profileData ||
-          typeof profileData !== "object"
-        ) {
-          setUser(null);
-
-          setProfileError(
-            "Profile information was not found."
+          throw new Error(
+            decoded?.message ||
+              decoded?.error ||
+              `Failed to load profile (${response.status})`
           );
-
-          return;
         }
 
-        // ------------------------------------------------------
-        // SAVE PROFILE
-        // ------------------------------------------------------
+        const normalized = normalizeProfile(decoded);
 
-        setUser(profileData);
+        if (!normalized) {
+          throw new Error(
+            "Profile information could not be loaded."
+          );
+        }
 
+        setUser(normalized);
+      } catch (requestError) {
         console.log(
-          "PROFILE STATE UPDATED"
+          "GET PROFILE ERROR:",
+          requestError
         );
 
-        console.log(
-          "PROFILE NAME =>",
-          profileData?.name
-        );
-
-        console.log(
-          "PROFILE EMAIL =>",
-          profileData?.email
-        );
-
-        console.log(
-          "PROFILE PHOTO =>",
-          profileData?.profile_photo
-        );
-      } catch (error) {
-        console.log(
-          "PROFILE ERROR =>",
-          error
-        );
-
-        setUser(null);
-
-        setProfileError(
-          error?.message ||
-            "Unable to load your profile. Please try again."
+        setError(
+          requestError?.message ||
+            "Unable to load profile."
         );
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        setProfileLoading(false);
+        setRefreshing(false);
       }
     },
     []
   );
-
-  // ==========================================================
-  // INITIAL LOAD
-  // ==========================================================
 
   useEffect(() => {
     getProfile(true);
@@ -583,294 +407,15 @@ const ProfileScreen = () => {
   // ==========================================================
 
   const handleRefresh = async () => {
-    if (isRefreshing) {
-      return;
-    }
-
-    setIsRefreshing(true);
-
+    setRefreshing(true);
     await getProfile(false);
   };
-
-  // ==========================================================
-  // PROFILE IMAGE
-  // ==========================================================
-
-  const getProfileImage = () => {
-    if (!user) {
-      return null;
-    }
-
-    const photo =
-      user?.profile_photo ||
-      user?.profilePhoto ||
-      user?.image ||
-      user?.photo ||
-      null;
-
-    if (!photo) {
-      return null;
-    }
-
-    const imageUrl =
-      String(photo).trim();
-
-    if (!imageUrl) {
-      return null;
-    }
-
-    if (
-      imageUrl.startsWith("http://") ||
-      imageUrl.startsWith("https://")
-    ) {
-      return imageUrl;
-    }
-
-    const cleanPath =
-      imageUrl.replace(/^\/+/, "");
-
-    return `${BASE_URL}/${cleanPath}`;
-  };
-
-  // ==========================================================
-  // USER NAME
-  // ==========================================================
-
-  const getUserName = () => {
-    return (
-      user?.name ||
-      user?.full_name ||
-      user?.fullName ||
-      user?.username ||
-      "Guest User"
-    );
-  };
-
-  // ==========================================================
-  // EMAIL
-  // ==========================================================
-
-  const getEmail = () => {
-    return (
-      user?.email ||
-      "No email available"
-    );
-  };
-
-  // ==========================================================
-  // PHONE
-  // ==========================================================
-
-  const getPhone = () => {
-    return (
-      user?.phone_number ||
-      user?.phone ||
-      "Not provided"
-    );
-  };
-
-  // ==========================================================
-  // ROLE
-  // ==========================================================
-
-  const getRole = () => {
-    const roles =
-      user?.roles ||
-      user?.role ||
-      user?.primary_role;
-
-    if (Array.isArray(roles)) {
-      if (roles.length === 0) {
-        return "-";
-      }
-
-      return roles
-        .map((item) =>
-          String(item)
-            .replace(/_/g, " ")
-            .replace(
-              /\b\w/g,
-              (char) =>
-                char.toUpperCase()
-            )
-        )
-        .join(", ");
-    }
-
-    if (roles) {
-      return String(roles)
-        .replace(/_/g, " ")
-        .replace(
-          /\b\w/g,
-          (char) =>
-            char.toUpperCase()
-        );
-    }
-
-    return "-";
-  };
-
-  // ==========================================================
-  // USER ID
-  // ==========================================================
-
-  const getUserId = () => {
-    return (
-      user?.user_id ||
-      user?.id ||
-      user?._id ||
-      "-"
-    );
-  };
-
-  // ==========================================================
-  // VERIFIED
-  // ==========================================================
-
-  const isVerified =
-    user?.is_verified === true ||
-    user?.is_verified === 1 ||
-    user?.is_verified === "1" ||
-    user?.is_verified === "true" ||
-    user?.verified === true;
-
-  // ==========================================================
-  // ADDRESS
-  // ==========================================================
-
-  const addressInfo =
-    user?.address_info || {};
-
-  // ==========================================================
-  // DOB
-  // ==========================================================
-
-  const getDOB = () => {
-    return (
-      user?.dob ||
-      "Not provided"
-    );
-  };
-
-  // ==========================================================
-  // GENDER
-  // ==========================================================
-
-  const getGender = () => {
-    if (!user?.gender) {
-      return "Not provided";
-    }
-
-    return String(user.gender)
-      .replace(/_/g, " ")
-      .replace(
-        /\b\w/g,
-        (char) =>
-          char.toUpperCase()
-      );
-  };
-
-  // ==========================================================
-  // ORDER STATS
-  // ==========================================================
-
-  const orderStats =
-    user?.order_stats || {};
-
-  const totalOrders =
-    orderStats?.total_orders ?? 0;
-
-  const completedOrders =
-    orderStats?.completed_orders ?? 0;
-
-  const cancelledOrders =
-    orderStats?.cancelled_orders ?? 0;
-
-  const totalSpent =
-    orderStats?.total_spent ?? 0;
 
   // ==========================================================
   // LOGOUT
   // ==========================================================
 
-  const logout = async () => {
-    if (isLoggingOut) {
-      return;
-    }
-
-    try {
-      setIsLoggingOut(true);
-
-      console.log(
-        "================================="
-      );
-
-      console.log(
-        "LOGOUT STARTED"
-      );
-
-      console.log(
-        "================================="
-      );
-
-      // ------------------------------------------------------
-      // CLEAR AUTH STORAGE
-      // ------------------------------------------------------
-
-      await clearAuthStorage();
-
-      // ------------------------------------------------------
-      // CLEAR PROFILE STATE
-      // ------------------------------------------------------
-
-      setUser(null);
-
-      console.log(
-        "PROFILE STATE CLEARED"
-      );
-
-      console.log(
-        "================================="
-      );
-
-      console.log(
-        "NAVIGATING TO LOGIN SCREEN"
-      );
-
-      console.log(
-        "================================="
-      );
-
-      // ------------------------------------------------------
-      // DIRECT NAVIGATION
-      // ------------------------------------------------------
-
-      router.replace("/Login_screen");
-
-      console.log(
-        "LOGIN NAVIGATION SENT"
-      );
-    } catch (error) {
-      console.log(
-        "LOGOUT ERROR =>",
-        error
-      );
-
-      setIsLoggingOut(false);
-
-      Alert.alert(
-        "Logout Error",
-        error?.message ||
-          "Unable to logout. Please try again."
-      );
-    }
-  };
-
-  // ==========================================================
-  // LOGOUT DIALOG
-  // ==========================================================
-
-  const showLogoutDialog = () => {
+  const handleLogout = () => {
     Alert.alert(
       "Logout",
       "Are you sure you want to logout?",
@@ -879,16 +424,23 @@ const ProfileScreen = () => {
           text: "Cancel",
           style: "cancel",
         },
-
         {
           text: "Logout",
           style: "destructive",
-          onPress: logout,
+          onPress: async () => {
+            try {
+              await clearAuthStorage();
+            } catch (logoutError) {
+              console.log(
+                "LOGOUT ERROR:",
+                logoutError
+              );
+            }
+
+            goToLogin();
+          },
         },
-      ],
-      {
-        cancelable: true,
-      }
+      ]
     );
   };
 
@@ -896,289 +448,114 @@ const ProfileScreen = () => {
   // DELETE ACCOUNT
   // ==========================================================
 
-  const deleteAccount = async () => {
-    if (isDeleting) {
+  const performDeleteAccount = async () => {
+    if (deleting) {
       return;
     }
 
     try {
-      console.log(
-        "================================="
-      );
+      setDeleting(true);
 
-      console.log(
-        "DELETE ACCOUNT STARTED"
-      );
-
-      console.log(
-        "================================="
-      );
-
-      // ------------------------------------------------------
-      // TOKEN
-      // ------------------------------------------------------
-
-      const token =
-        await getStoredToken();
-
-      console.log(
-        "DELETE TOKEN EXISTS =>",
-        !!token
-      );
-
-      // ------------------------------------------------------
-      // USER ID
-      // ------------------------------------------------------
-
-      const userId =
-        user?.user_id ||
-        user?.id ||
-        user?._id;
-
-      console.log(
-        "DELETE USER ID =>",
-        userId
-      );
-
-      // ------------------------------------------------------
-      // TOKEN VALIDATION
-      // ------------------------------------------------------
+      const token = await getStoredToken();
 
       if (!token) {
-        Alert.alert(
-          "Authentication Failed",
-          "Access token not found. Please login again.",
-          [
-            {
-              text: "OK",
-              onPress: async () => {
-                await clearAuthStorage();
-                goToLogin();
-              },
-            },
-          ]
-        );
-
+        await clearAuthStorage();
+        goToLogin();
         return;
       }
 
-      // ------------------------------------------------------
-      // USER ID VALIDATION
-      // ------------------------------------------------------
+      const userId =
+        user?.id ||
+        user?.user_id ||
+        user?._id;
 
       if (!userId) {
         Alert.alert(
-          "Delete Account",
-          "Unable to identify your account."
+          "Unable to Delete",
+          "User ID was not found. Please login again."
         );
-
         return;
       }
 
-      setIsDeleting(true);
-
-      // ------------------------------------------------------
-      // DELETE URL
-      // ------------------------------------------------------
-
-      const deleteUrl =
-        `${BASE_URL}/api/v1/users/deleteuser/${userId}`;
-
-      console.log(
-        "DELETE URL =>",
-        deleteUrl
-      );
-
-      // ------------------------------------------------------
-      // DELETE REQUEST
-      // ------------------------------------------------------
-
-      const response =
-        await fetch(deleteUrl, {
+      const response = await fetch(
+        `${BASE_URL}/api/v1/users/deleteuser/${userId}`,
+        {
           method: "DELETE",
-
           headers: {
-            Accept:
-              "application/json",
-
-            Authorization:
-              `Bearer ${token}`,
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
           },
-        });
-
-      console.log(
-        "DELETE STATUS =>",
-        response.status
-      );
-
-      const responseText =
-        await response.text();
-
-      console.log(
-        "DELETE RESPONSE =>",
-        responseText
-      );
-
-      // ------------------------------------------------------
-      // PARSE RESPONSE
-      // ------------------------------------------------------
-
-      let data = {};
-
-      if (responseText) {
-        try {
-          data =
-            JSON.parse(responseText);
-        } catch (error) {
-          console.log(
-            "DELETE RESPONSE IS NOT JSON"
-          );
-
-          data = {
-            message: responseText,
-          };
         }
-      }
-
-      console.log(
-        "DELETE DECODED =>",
-        data
       );
 
-      // ------------------------------------------------------
-      // SUCCESS
-      // ------------------------------------------------------
+      const rawText = await response.text();
 
-      if (
-        response.status === 200 ||
-        response.status === 201 ||
-        response.status === 202 ||
-        response.status === 204
-      ) {
+      let decoded = null;
+
+      try {
+        decoded = rawText
+          ? JSON.parse(rawText)
+          : null;
+      } catch (parseError) {
         console.log(
-          "ACCOUNT DELETE SUCCESS"
+          "DELETE RESPONSE PARSE ERROR:",
+          parseError
         );
-
-        // ----------------------------------------------------
-        // CLEAR AUTH DATA
-        // ----------------------------------------------------
-
-        await clearAuthStorage();
-
-        // ----------------------------------------------------
-        // CLEAR PROFILE
-        // ----------------------------------------------------
-
-        setUser(null);
-
-        setIsDeleting(false);
-
-        console.log(
-          "ACCOUNT DATA CLEARED"
-        );
-
-        // ----------------------------------------------------
-        // SUCCESS MESSAGE
-        // ----------------------------------------------------
-
-        Alert.alert(
-          "Account Deleted",
-          "Your account has been deleted successfully.",
-          [
-            {
-              text: "OK",
-
-              onPress: () => {
-                console.log(
-                  "REDIRECTING AFTER DELETE"
-                );
-
-                goToLogin();
-              },
-            },
-          ],
-          {
-            cancelable: false,
-          }
-        );
-
-        return;
       }
-
-      // ------------------------------------------------------
-      // AUTH ERROR
-      // ------------------------------------------------------
 
       if (
         response.status === 401 ||
         response.status === 403
       ) {
-        setIsDeleting(false);
-
-        Alert.alert(
-          "Authentication Failed",
-          "Your session has expired. Please login again.",
-          [
-            {
-              text: "OK",
-
-              onPress: async () => {
-                await clearAuthStorage();
-
-                goToLogin();
-              },
-            },
-          ],
-          {
-            cancelable: false,
-          }
-        );
-
+        await clearAuthStorage();
+        goToLogin();
         return;
       }
 
-      // ------------------------------------------------------
-      // DELETE ERROR
-      // ------------------------------------------------------
-
-      const message =
-        getApiErrorMessage(
-          data,
-          `Failed to delete account. Server returned ${response.status}.`
+      if (
+        response.status !== 200 &&
+        response.status !== 201 &&
+        response.status !== 202 &&
+        response.status !== 204
+      ) {
+        throw new Error(
+          decoded?.message ||
+            decoded?.error ||
+            "Failed to delete account."
         );
+      }
 
-      console.log(
-        "DELETE FAILED =>",
-        message
-      );
-
-      setIsDeleting(false);
+      await clearAuthStorage();
 
       Alert.alert(
-        "Delete Account",
-        String(message)
+        "Account Deleted",
+        "Your HomeCookt account has been deleted successfully.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              goToLogin();
+            },
+          },
+        ]
       );
-    } catch (error) {
+    } catch (deleteError) {
       console.log(
-        "DELETE ACCOUNT ERROR =>",
-        error
+        "DELETE ACCOUNT ERROR:",
+        deleteError
       );
-
-      setIsDeleting(false);
 
       Alert.alert(
-        "Delete Account Error",
-        error?.message ||
-          "Something went wrong while deleting your account."
+        "Delete Failed",
+        deleteError?.message ||
+          "Unable to delete your account. Please try again."
       );
+    } finally {
+      setDeleting(false);
     }
   };
 
-  // ==========================================================
-  // DELETE DIALOG
-  // ==========================================================
-
-  const showDeleteAccountDialog = () => {
+  const handleDeleteAccount = () => {
     Alert.alert(
       "Delete Account",
       "Are you sure you want to permanently delete your account? This action cannot be undone.",
@@ -1187,96 +564,272 @@ const ProfileScreen = () => {
           text: "Cancel",
           style: "cancel",
         },
-
         {
           text: "Delete",
           style: "destructive",
-          onPress: deleteAccount,
+          onPress: performDeleteAccount,
         },
-      ],
-      {
-        cancelable: true,
-      }
+      ]
     );
   };
 
   // ==========================================================
-  // SAFE NAVIGATION
+  // NAVIGATION
   // ==========================================================
 
   const navigateTo = (
     screen,
-    params = undefined
+    params = {}
   ) => {
     try {
+      router.push({
+        pathname: `/${screen}`,
+        params: {
+          user: JSON.stringify(
+            params?.user || user || {}
+          ),
+        },
+      });
+    } catch (navigationError) {
       console.log(
-        "NAVIGATING TO =>",
-        screen
+        "NAVIGATION ERROR:",
+        navigationError
       );
 
-      if (params !== undefined) {
-        router.push({
-          pathname: `/${screen}`,
-
-          params: {
-            user:
-              JSON.stringify(params),
-          },
-        });
-      } else {
+      try {
         router.push(`/${screen}`);
+      } catch (fallbackError) {
+        console.log(
+          "FALLBACK NAVIGATION ERROR:",
+          fallbackError
+        );
       }
-    } catch (error) {
-      console.log(
-        `Navigation error for ${screen} =>`,
-        error
-      );
-
-      Alert.alert(
-        "Navigation Error",
-        `Unable to open ${screen}.`
-      );
     }
   };
 
   // ==========================================================
-  // SETTINGS
+  // HELPERS
   // ==========================================================
 
-  const openSettings = () => {
-    navigateTo("Settings_screen");
+  const formatGender = (gender) => {
+    if (!gender) {
+      return "";
+    }
+
+    return String(gender)
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .map(
+        (word) =>
+          word.charAt(0).toUpperCase() +
+          word.slice(1).toLowerCase()
+      )
+      .join(" ");
+  };
+
+  const formatCurrency = (value) => {
+    const numericValue = Number(value || 0);
+
+    return `₹${numericValue.toLocaleString("en-IN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const getAddressText = () => {
+    const address = user?.address;
+
+    if (!address) {
+      return "";
+    }
+
+    return [
+      address.address,
+      address.city,
+      address.state,
+      address.country,
+      address.pincode,
+    ]
+      .filter(Boolean)
+      .join(", ");
   };
 
   // ==========================================================
-  // EDIT PROFILE
+  // LOCAL THEME ALIAS
   // ==========================================================
 
-  const openEditProfile = () => {
-    navigateTo(
-      "Update_profile_screen",
-      user
+  const theme = {
+    background: colors.background,
+    card: colors.card,
+    foreground: colors.foreground,
+    bodyText: colors.textSecondary,
+    muted: colors.mutedForeground,
+    border: colors.border,
+  };
+
+  // ==========================================================
+  // LOADING
+  // ==========================================================
+
+  if (profileLoading) {
+    return (
+      <SafeAreaView
+        style={[
+          styles.loadingContainer,
+          {
+            backgroundColor:
+              colors.background,
+          },
+        ]}
+        edges={["top", "bottom"]}
+      >
+        <StatusBar
+          barStyle={
+            isDarkMode
+              ? "light-content"
+              : "dark-content"
+          }
+          backgroundColor={
+            colors.background
+          }
+        />
+
+        <ActivityIndicator
+          size="large"
+          color={colors.orange}
+        />
+
+        <Text
+          style={[
+            styles.loadingText,
+            {
+              color: colors.foreground,
+            },
+          ]}
+        >
+          Loading profile...
+        </Text>
+      </SafeAreaView>
     );
-  };
+  }
 
   // ==========================================================
-  // HELP SUPPORT
+  // ERROR
   // ==========================================================
 
-  const openHelpSupport = () => {
-    navigateTo(
-      "Help_support_screen"
+  if (error && !user) {
+    return (
+      <SafeAreaView
+        style={[
+          styles.errorContainer,
+          {
+            backgroundColor:
+              colors.background,
+          },
+        ]}
+        edges={["top", "bottom"]}
+      >
+        <StatusBar
+          barStyle={
+            isDarkMode
+              ? "light-content"
+              : "dark-content"
+          }
+          backgroundColor={
+            colors.background
+          }
+        />
+
+        <View
+          style={[
+            styles.errorIconContainer,
+            {
+              backgroundColor:
+                colors.backgroundSelected,
+            },
+          ]}
+        >
+          <Ionicons
+            name="person-outline"
+            size={48}
+            color={colors.orange}
+          />
+        </View>
+
+        <Text
+          style={[
+            styles.errorTitle,
+            {
+              color: colors.foreground,
+            },
+          ]}
+        >
+          Unable to Load Profile
+        </Text>
+
+        <Text
+          style={[
+            styles.errorMessage,
+            {
+              color: colors.mutedForeground,
+            },
+          ]}
+        >
+          {error}
+        </Text>
+
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[
+            styles.retryButton,
+            {
+              backgroundColor:
+                colors.orange,
+            },
+          ]}
+          onPress={() =>
+            getProfile(true)
+          }
+        >
+          <Ionicons
+            name="refresh"
+            size={19}
+            color={colors.white}
+          />
+
+          <Text
+            style={[
+              styles.retryButtonText,
+              {
+                color: colors.white,
+              },
+            ]}
+          >
+            Retry
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.loginButton}
+          onPress={goToLogin}
+        >
+          <Text
+            style={[
+              styles.loginButtonText,
+              {
+                color: colors.orange,
+              },
+            ]}
+          >
+            Go to Login
+          </Text>
+        </TouchableOpacity>
+      </SafeAreaView>
     );
-  };
-
-  // ==========================================================
-  // PRIVACY POLICY
-  // ==========================================================
-
-  const openPrivacyPolicy = () => {
-    navigateTo(
-      "Privacy_policy_screen"
-    );
-  };
+  }
 
   // ==========================================================
   // STAT CARD
@@ -1284,8 +837,9 @@ const ProfileScreen = () => {
 
   const StatCard = ({
     icon,
-    value,
     label,
+    value,
+    iconColor,
   }) => {
     return (
       <View
@@ -1294,17 +848,33 @@ const ProfileScreen = () => {
           {
             backgroundColor:
               theme.card,
+            borderColor:
+              theme.border,
+            shadowColor:
+              colors.shadowColor,
           },
         ]}
       >
-        <Ionicons
-          name={icon}
-          size={23}
-          color={COLORS.orange}
-        />
+        <View
+          style={[
+            styles.statIconContainer,
+            {
+              backgroundColor:
+                colors.backgroundSelected,
+            },
+          ]}
+        >
+          <Ionicons
+            name={icon}
+            size={20}
+            color={
+              iconColor ||
+              colors.orange
+            }
+          />
+        </View>
 
         <Text
-          numberOfLines={2}
           style={[
             styles.statValue,
             {
@@ -1313,16 +883,15 @@ const ProfileScreen = () => {
             },
           ]}
         >
-          {String(value)}
+          {value}
         </Text>
 
         <Text
-          numberOfLines={1}
           style={[
             styles.statLabel,
             {
               color:
-                theme.bodyText,
+                theme.muted,
             },
           ]}
         >
@@ -1337,54 +906,41 @@ const ProfileScreen = () => {
   // ==========================================================
 
   const MenuCard = ({
-    children,
+    icon,
+    title,
+    subtitle,
+    onPress,
+    color,
+    danger = false,
   }) => {
+    const itemColor =
+      color ||
+      (danger
+        ? colors.destructive
+        : colors.orange);
+
     return (
-      <View
+      <TouchableOpacity
+        activeOpacity={0.78}
+        onPress={onPress}
         style={[
           styles.menuCard,
           {
             backgroundColor:
               theme.card,
+            borderColor:
+              theme.border,
+            shadowColor:
+              colors.shadowColor,
           },
         ]}
-      >
-        {children}
-      </View>
-    );
-  };
-
-  // ==========================================================
-  // MENU TILE
-  // ==========================================================
-
-  const MenuTile = ({
-    icon,
-    title,
-    onPress,
-    color,
-  }) => {
-    const itemColor =
-      color || COLORS.orange;
-
-    const isLogout =
-      title === "Logout";
-
-    return (
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={onPress}
-        disabled={
-          isLogout && isLoggingOut
-        }
-        style={styles.menuTile}
       >
         <View
           style={[
             styles.menuIconContainer,
             {
               backgroundColor:
-                itemColor === COLORS.red
+                danger
                   ? "rgba(239,68,68,0.10)"
                   : "rgba(249,115,22,0.10)",
             },
@@ -1397,38 +953,119 @@ const ProfileScreen = () => {
           />
         </View>
 
-        <Text
+        <View style={styles.menuTextContainer}>
+          <Text
+            style={[
+              styles.menuTitle,
+              {
+                color:
+                  danger
+                    ? colors.destructive
+                    : theme.foreground,
+              },
+            ]}
+          >
+            {title}
+          </Text>
+
+          {subtitle ? (
+            <Text
+              style={[
+                styles.menuSubtitle,
+                {
+                  color:
+                    theme.muted,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color={colors.mutedForeground}
+        />
+      </TouchableOpacity>
+    );
+  };
+
+  // ==========================================================
+  // MENU TILE
+  // ==========================================================
+
+  const MenuTile = ({
+    icon,
+    title,
+    subtitle,
+    onPress,
+    color,
+  }) => {
+    const itemColor =
+      color || colors.orange;
+
+    return (
+      <TouchableOpacity
+        activeOpacity={0.78}
+        onPress={onPress}
+        style={[
+          styles.menuTile,
+          {
+            backgroundColor:
+              theme.card,
+            borderColor:
+              theme.border,
+            shadowColor:
+              colors.shadowColor,
+          },
+        ]}
+      >
+        <View
           style={[
-            styles.menuTitle,
+            styles.menuTileIcon,
             {
-              color:
-                color ||
-                theme.foreground,
+              backgroundColor:
+                colors.backgroundSelected,
             },
           ]}
         >
-          {isLogout && isLoggingOut
-            ? "Logging out..."
-            : title}
+          <Ionicons
+            name={icon}
+            size={21}
+            color={itemColor}
+          />
+        </View>
+
+        <Text
+          style={[
+            styles.menuTileTitle,
+            {
+              color:
+                theme.foreground,
+            },
+          ]}
+          numberOfLines={1}
+        >
+          {title}
         </Text>
 
-        {isLogout &&
-        isLoggingOut ? (
-          <ActivityIndicator
-            size="small"
-            color={COLORS.red}
-          />
-        ) : (
-          <Ionicons
-            name="chevron-forward"
-            size={21}
-            color={
-              isDark
-                ? "#777777"
-                : "#9CA3AF"
-            }
-          />
-        )}
+        {subtitle ? (
+          <Text
+            style={[
+              styles.menuTileSubtitle,
+              {
+                color:
+                  theme.muted,
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -1439,6 +1076,7 @@ const ProfileScreen = () => {
 
   const SectionTitle = ({
     title,
+    icon,
   }) => {
     return (
       <View
@@ -1446,6 +1084,17 @@ const ProfileScreen = () => {
           styles.sectionTitleContainer
         }
       >
+        {icon ? (
+          <Ionicons
+            name={icon}
+            size={18}
+            color={colors.orange}
+            style={
+              styles.sectionTitleIcon
+            }
+          />
+        ) : null}
+
         <Text
           style={[
             styles.sectionTitle,
@@ -1470,21 +1119,33 @@ const ProfileScreen = () => {
     label,
     value,
   }) => {
+    if (!value) {
+      return null;
+    }
+
     return (
-      <View style={styles.infoRow}>
+      <View
+        style={[
+          styles.infoRow,
+          {
+            borderBottomColor:
+              theme.border,
+          },
+        ]}
+      >
         <View
           style={[
-            styles.infoIcon,
+            styles.infoIconContainer,
             {
               backgroundColor:
-                "rgba(249,115,22,0.10)",
+                colors.backgroundSelected,
             },
           ]}
         >
           <Ionicons
             name={icon}
-            size={19}
-            color={COLORS.orange}
+            size={18}
+            color={colors.orange}
           />
         </View>
 
@@ -1512,7 +1173,7 @@ const ProfileScreen = () => {
               },
             ]}
           >
-            {value || "Not provided"}
+            {value}
           </Text>
         </View>
       </View>
@@ -1520,184 +1181,11 @@ const ProfileScreen = () => {
   };
 
   // ==========================================================
-  // LOADING
+  // MAIN PROFILE
   // ==========================================================
 
-  if (isLoading) {
-    return (
-      <SafeAreaView
-        style={[
-          styles.loadingScreen,
-          {
-            backgroundColor:
-              theme.background,
-          },
-        ]}
-        edges={[
-          "top",
-          "bottom",
-        ]}
-      >
-        <StatusBar
-          barStyle={
-            isDark
-              ? "light-content"
-              : "dark-content"
-          }
-          backgroundColor={
-            theme.background
-          }
-        />
-
-        <ActivityIndicator
-          size="large"
-          color={COLORS.orange}
-        />
-
-        <Text
-          style={[
-            styles.loadingText,
-            {
-              color:
-                theme.bodyText,
-            },
-          ]}
-        >
-          Loading profile...
-        </Text>
-      </SafeAreaView>
-    );
-  }
-
-  // ==========================================================
-  // ERROR
-  // ==========================================================
-
-  if (!user) {
-    return (
-      <SafeAreaView
-        style={[
-          styles.emptyScreen,
-          {
-            backgroundColor:
-              theme.background,
-          },
-        ]}
-        edges={[
-          "top",
-          "bottom",
-        ]}
-      >
-        <StatusBar
-          barStyle={
-            isDark
-              ? "light-content"
-              : "dark-content"
-          }
-          backgroundColor={
-            theme.background
-          }
-        />
-
-        <View
-          style={styles.emptyIcon}
-        >
-          <Ionicons
-            name="person-outline"
-            size={45}
-            color={COLORS.orange}
-          />
-        </View>
-
-        <Text
-          style={[
-            styles.emptyTitle,
-            {
-              color:
-                theme.foreground,
-            },
-          ]}
-        >
-          Unable to load profile
-        </Text>
-
-        <Text
-          style={[
-            styles.emptyMessage,
-            {
-              color:
-                theme.bodyText,
-            },
-          ]}
-        >
-          {profileError ||
-            "Profile information is currently unavailable."}
-        </Text>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() =>
-            getProfile(true)
-          }
-          style={
-            styles.retryButton
-          }
-        >
-          <Ionicons
-            name="refresh"
-            size={18}
-            color={COLORS.white}
-          />
-
-          <Text
-            style={
-              styles.retryButtonText
-            }
-          >
-            Try Again
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={async () => {
-            await clearAuthStorage();
-            goToLogin();
-          }}
-          style={[
-            styles.loginButton,
-            {
-              borderColor:
-                COLORS.orange,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.loginButtonText,
-              {
-                color:
-                  COLORS.orange,
-              },
-            ]}
-          >
-            Go to Login
-          </Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
-
-  // ==========================================================
-  // PROFILE IMAGE
-  // ==========================================================
-
-  const profileImage =
-    getProfileImage();
-
-  // ==========================================================
-  // MAIN RENDER
-  // ==========================================================
+  const screenWidth =
+    Dimensions.get("window").width;
 
   return (
     <SafeAreaView
@@ -1713,42 +1201,39 @@ const ProfileScreen = () => {
       <StatusBar
         barStyle="light-content"
         backgroundColor={
-          COLORS.orange
+          colors.orange
         }
       />
 
       <ScrollView
-        showsVerticalScrollIndicator={
-          false
-        }
-        refreshControl={
-          <RefreshControl
-            refreshing={
-              isRefreshing
-            }
-            onRefresh={
-              handleRefresh
-            }
-            tintColor={
-              COLORS.orange
-            }
-            colors={[
-              COLORS.orange,
-            ]}
-          />
-        }
+        style={[
+          styles.scrollView,
+          {
+            backgroundColor:
+              theme.background,
+          },
+        ]}
         contentContainerStyle={
           styles.scrollContent
         }
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.orange}
+            colors={[colors.orange]}
+          />
+        }
       >
-        {/* ====================================================
-            PROFILE HEADER
-        ==================================================== */}
+        {/* ================================================== */}
+        {/* HEADER */}
+        {/* ================================================== */}
 
         <LinearGradient
           colors={[
-            COLORS.orange,
-            COLORS.gold,
+            colors.orange,
+            colors.gold,
           ]}
           start={{
             x: 0,
@@ -1758,557 +1243,356 @@ const ProfileScreen = () => {
             x: 1,
             y: 1,
           }}
-          style={
-            styles.profileHeader
-          }
+          style={styles.header}
         >
-          {/* SETTINGS */}
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={
-              openSettings
-            }
-            style={
-              styles.settingsButton
-            }
+          <View
+            style={styles.headerTop}
           >
-            <Ionicons
-              name="settings-outline"
-              size={23}
-              color={
-                COLORS.white
-              }
-            />
-          </TouchableOpacity>
+            <Text
+              style={[
+                styles.headerTitle,
+                {
+                  color:
+                    colors.white,
+                },
+              ]}
+            >
+              Profile
+            </Text>
 
-          {/* PROFILE IMAGE */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() =>
+                navigateTo(
+                  "Settings_screen"
+                )
+              }
+              style={[
+                styles.settingsButton,
+                {
+                  backgroundColor:
+                    "rgba(255,255,255,0.20)",
+                },
+              ]}
+            >
+              <Ionicons
+                name="settings-outline"
+                size={22}
+                color={colors.white}
+              />
+            </TouchableOpacity>
+          </View>
 
           <View
-            style={
-              styles.profileImageWrapper
-            }
+            style={styles.profileHeader}
           >
-            {profileImage ? (
-              <Image
-                source={{
-                  uri: profileImage,
-                }}
-                style={
-                  styles.profileImage
-                }
-                resizeMode="cover"
-                onError={(error) => {
-                  console.log(
-                    "PROFILE IMAGE ERROR =>",
-                    error?.nativeEvent
-                  );
-                }}
-              />
-            ) : (
-              <View
-                style={[
-                  styles.profileImage,
-                  styles.defaultProfileImage,
-                ]}
-              >
-                <Ionicons
-                  name="person"
-                  size={55}
-                  color={
-                    COLORS.foreground
+            <View
+              style={[
+                styles.profileImageWrapper,
+                {
+                  borderColor:
+                    "rgba(255,255,255,0.75)",
+                },
+              ]}
+            >
+              {user?.image ? (
+                <Image
+                  source={{
+                    uri: user.image,
+                  }}
+                  style={
+                    styles.profileImage
                   }
                 />
-              </View>
-            )}
-          </View>
+              ) : (
+                <View
+                  style={[
+                    styles.profileImagePlaceholder,
+                    {
+                      backgroundColor:
+                        colors.white,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="person"
+                    size={52}
+                    color={
+                      colors.foreground
+                    }
+                  />
+                </View>
+              )}
+            </View>
 
-          {/* NAME */}
-
-          <Text
-            style={
-              styles.profileName
-            }
-            numberOfLines={2}
-          >
-            {getUserName()}
-          </Text>
-
-          {/* EMAIL */}
-
-          <Text
-            style={
-              styles.profileEmail
-            }
-            numberOfLines={1}
-          >
-            {getEmail()}
-          </Text>
-
-          {/* ROLE */}
-
-          <View
-            style={
-              styles.roleBadge
-            }
-          >
-            <Ionicons
-              name="person-outline"
-              size={14}
-              color={
-                COLORS.orange
-              }
-            />
-
-            <Text
-              style={
-                styles.roleBadgeText
-              }
+            <View
+              style={[
+                styles.profileNameContainer,
+                {
+                  maxWidth:
+                    screenWidth - 120,
+                },
+              ]}
             >
-              {getRole()}
-            </Text>
-          </View>
+              <View
+                style={
+                  styles.nameRow
+                }
+              >
+                <Text
+                  style={[
+                    styles.profileName,
+                    {
+                      color:
+                        colors.white,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {user?.name ||
+                    "HomeCookt User"}
+                </Text>
 
-          {/* EDIT PROFILE */}
+                {user?.isVerified ? (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color={
+                      colors.white
+                    }
+                    style={
+                      styles.verifiedIcon
+                    }
+                  />
+                ) : null}
+              </View>
+
+              {user?.email ? (
+                <Text
+                  style={[
+                    styles.profileEmail,
+                    {
+                      color:
+                        "rgba(255,255,255,0.90)",
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {user.email}
+                </Text>
+              ) : null}
+
+              <View
+                style={[
+                  styles.roleBadge,
+                  {
+                    backgroundColor:
+                      "rgba(255,255,255,0.92)",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.roleBadgeText,
+                    {
+                      color:
+                        colors.orange,
+                    },
+                  ]}
+                >
+                  {user?.role ||
+                    "Customer"}
+                </Text>
+              </View>
+            </View>
+          </View>
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={
-              openEditProfile
-            }
-            style={
-              styles.editButton
+            style={[
+              styles.editProfileButton,
+              {
+                backgroundColor:
+                  colors.white,
+              },
+            ]}
+            onPress={() =>
+              navigateTo(
+                "Update_profile_screen",
+                {
+                  user,
+                }
+              )
             }
           >
             <Ionicons
               name="create-outline"
               size={18}
-              color={
-                COLORS.orange
-              }
+              color={colors.orange}
             />
 
             <Text
-              style={
-                styles.editButtonText
-              }
+              style={[
+                styles.editProfileText,
+                {
+                  color:
+                    colors.orange,
+                },
+              ]}
             >
               Edit Profile
             </Text>
           </TouchableOpacity>
         </LinearGradient>
 
-        {/* ====================================================
-            CONTENT
-        ==================================================== */}
+        {/* ================================================== */}
+        {/* QUICK STATS */}
+        {/* ================================================== */}
 
         <View
-          style={styles.content}
+          style={styles.statsContainer}
         >
-          {/* ==================================================
-              BASIC STATS
-          ================================================== */}
-
-          <View
-            style={styles.statsRow}
-          >
-            <StatCard
-              icon="id-card-outline"
-              value={getUserId()}
-              label="User ID"
-            />
-
-            <View
-              style={
-                styles.statGap
-              }
-            />
-
-            <StatCard
-              icon="checkmark-circle"
-              value={
-                isVerified
-                  ? "Yes"
-                  : "No"
-              }
-              label="Verified"
-            />
-
-            <View
-              style={
-                styles.statGap
-              }
-            />
-
-            <StatCard
-              icon="person-outline"
-              value={getRole()}
-              label="Role"
-            />
-          </View>
-
-          {/* ==================================================
-              PERSONAL INFORMATION
-          ================================================== */}
-
-          <SectionTitle
-            title="Personal Information"
+          <StatCard
+            icon="bag-check-outline"
+            label="Orders"
+            value={
+              user?.orderStats
+                ?.totalOrders ?? 0
+            }
+            iconColor={
+              colors.orange
+            }
           />
 
-          <MenuCard>
+          <StatCard
+            icon="checkmark-circle-outline"
+            label="Completed"
+            value={
+              user?.orderStats
+                ?.completedOrders ?? 0
+            }
+            iconColor={
+              colors.greenDot
+            }
+          />
+
+          <StatCard
+            icon="close-circle-outline"
+            label="Cancelled"
+            value={
+              user?.orderStats
+                ?.cancelledOrders ?? 0
+            }
+            iconColor={
+              colors.destructive
+            }
+          />
+        </View>
+
+        {/* ================================================== */}
+        {/* ACCOUNT INFORMATION */}
+        {/* ================================================== */}
+
+        <View
+          style={styles.section}
+        >
+          <SectionTitle
+            title="Account Information"
+            icon="person-outline"
+          />
+
+          <View
+            style={[
+              styles.infoCard,
+              {
+                backgroundColor:
+                  theme.card,
+                borderColor:
+                  theme.border,
+                shadowColor:
+                  colors.shadowColor,
+              },
+            ]}
+          >
             <InfoRow
               icon="mail-outline"
               label="Email"
-              value={getEmail()}
-            />
-
-            <View
-              style={[
-                styles.divider,
-                {
-                  backgroundColor:
-                    theme.border,
-                },
-              ]}
+              value={user?.email}
             />
 
             <InfoRow
               icon="call-outline"
               label="Phone"
-              value={getPhone()}
-            />
-
-            <View
-              style={[
-                styles.divider,
-                {
-                  backgroundColor:
-                    theme.border,
-                },
-              ]}
+              value={user?.phone}
             />
 
             <InfoRow
               icon="calendar-outline"
               label="Date of Birth"
-              value={getDOB()}
-            />
-
-            <View
-              style={[
-                styles.divider,
-                {
-                  backgroundColor:
-                    theme.border,
-                },
-              ]}
+              value={user?.dob}
             />
 
             <InfoRow
-              icon="male-female-outline"
+              icon="person-outline"
               label="Gender"
-              value={getGender()}
+              value={formatGender(
+                user?.gender
+              )}
             />
-          </MenuCard>
 
-          {/* ==================================================
-              ADDRESS
-          ================================================== */}
-
-          <SectionTitle
-            title="Address"
-          />
-
-          <MenuCard>
             <InfoRow
               icon="location-outline"
               label="Address"
-              value={
-                addressInfo?.address ||
-                "Not provided"
-              }
+              value={getAddressText()}
             />
+          </View>
+        </View>
 
-            <View
-              style={[
-                styles.divider,
-                {
-                  backgroundColor:
-                    theme.border,
-                },
-              ]}
-            />
+        {/* ================================================== */}
+        {/* ORDER SUMMARY */}
+        {/* ================================================== */}
 
-            <InfoRow
-              icon="business-outline"
-              label="City"
-              value={
-                addressInfo?.city ||
-                "Not provided"
-              }
-            />
-
-            <View
-              style={[
-                styles.divider,
-                {
-                  backgroundColor:
-                    theme.border,
-                },
-              ]}
-            />
-
-            <InfoRow
-              icon="map-outline"
-              label="State"
-              value={
-                addressInfo?.state ||
-                "Not provided"
-              }
-            />
-
-            <View
-              style={[
-                styles.divider,
-                {
-                  backgroundColor:
-                    theme.border,
-                },
-              ]}
-            />
-
-            <InfoRow
-              icon="globe-outline"
-              label="Country"
-              value={
-                addressInfo?.country ||
-                "Not provided"
-              }
-            />
-
-            <View
-              style={[
-                styles.divider,
-                {
-                  backgroundColor:
-                    theme.border,
-                },
-              ]}
-            />
-
-            <InfoRow
-              icon="mail-outline"
-              label="Pincode"
-              value={
-                addressInfo?.pincode ||
-                "Not provided"
-              }
-            />
-          </MenuCard>
-
-          {/* ==================================================
-              ORDER STATISTICS
-          ================================================== */}
-
+        <View
+          style={styles.section}
+        >
           <SectionTitle
-            title="Order Statistics"
+            title="Order Summary"
+            icon="receipt-outline"
           />
 
           <View
-            style={
-              styles.orderStatsGrid
-            }
+            style={[
+              styles.spendingCard,
+              {
+                backgroundColor:
+                  theme.card,
+                borderColor:
+                  theme.border,
+                shadowColor:
+                  colors.shadowColor,
+              },
+            ]}
           >
-            {/* TOTAL ORDERS */}
-
             <View
-              style={[
-                styles.orderStatCard,
-                {
-                  backgroundColor:
-                    theme.card,
-                },
-              ]}
+              style={
+                styles.spendingIcon
+              }
             >
-              <View
-                style={
-                  styles.orderStatIcon
-                }
-              >
-                <Ionicons
-                  name="receipt-outline"
-                  size={22}
-                  color={
-                    COLORS.orange
-                  }
-                />
-              </View>
-
-              <Text
-                style={[
-                  styles.orderStatValue,
-                  {
-                    color:
-                      theme.foreground,
-                  },
-                ]}
-              >
-                {totalOrders}
-              </Text>
-
-              <Text
-                style={[
-                  styles.orderStatLabel,
-                  {
-                    color:
-                      theme.muted,
-                  },
-                ]}
-              >
-                Total Orders
-              </Text>
+              <Ionicons
+                name="wallet-outline"
+                size={25}
+                color={colors.orange}
+              />
             </View>
 
-            {/* COMPLETED */}
-
             <View
-              style={[
-                styles.orderStatCard,
-                {
-                  backgroundColor:
-                    theme.card,
-                },
-              ]}
+              style={
+                styles.spendingContent
+              }
             >
-              <View
-                style={
-                  styles.orderStatIcon
-                }
-              >
-                <Ionicons
-                  name="checkmark-done-outline"
-                  size={22}
-                  color={
-                    COLORS.orange
-                  }
-                />
-              </View>
-
               <Text
                 style={[
-                  styles.orderStatValue,
-                  {
-                    color:
-                      theme.foreground,
-                  },
-                ]}
-              >
-                {completedOrders}
-              </Text>
-
-              <Text
-                style={[
-                  styles.orderStatLabel,
-                  {
-                    color:
-                      theme.muted,
-                  },
-                ]}
-              >
-                Completed
-              </Text>
-            </View>
-
-            {/* CANCELLED */}
-
-            <View
-              style={[
-                styles.orderStatCard,
-                {
-                  backgroundColor:
-                    theme.card,
-                },
-              ]}
-            >
-              <View
-                style={
-                  styles.orderStatIcon
-                }
-              >
-                <Ionicons
-                  name="close-circle-outline"
-                  size={22}
-                  color={
-                    COLORS.red
-                  }
-                />
-              </View>
-
-              <Text
-                style={[
-                  styles.orderStatValue,
-                  {
-                    color:
-                      theme.foreground,
-                  },
-                ]}
-              >
-                {cancelledOrders}
-              </Text>
-
-              <Text
-                style={[
-                  styles.orderStatLabel,
-                  {
-                    color:
-                      theme.muted,
-                  },
-                ]}
-              >
-                Cancelled
-              </Text>
-            </View>
-
-            {/* TOTAL SPENT */}
-
-            <View
-              style={[
-                styles.orderStatCard,
-                {
-                  backgroundColor:
-                    theme.card,
-                },
-              ]}
-            >
-              <View
-                style={
-                  styles.orderStatIcon
-                }
-              >
-                <Ionicons
-                  name="wallet-outline"
-                  size={22}
-                  color={
-                    COLORS.orange
-                  }
-                />
-              </View>
-
-              <Text
-                style={[
-                  styles.orderStatValue,
-                  {
-                    color:
-                      theme.foreground,
-                  },
-                ]}
-              >
-                {totalSpent}
-              </Text>
-
-              <Text
-                style={[
-                  styles.orderStatLabel,
+                  styles.spendingLabel,
                   {
                     color:
                       theme.muted,
@@ -2317,192 +1601,212 @@ const ProfileScreen = () => {
               >
                 Total Spent
               </Text>
+
+              <Text
+                style={[
+                  styles.spendingValue,
+                  {
+                    color:
+                      theme.foreground,
+                  },
+                ]}
+              >
+                {formatCurrency(
+                  user?.orderStats
+                    ?.totalSpent
+                )}
+              </Text>
             </View>
+
+            <Ionicons
+              name="trending-up-outline"
+              size={24}
+              color={
+                colors.greenDot
+              }
+            />
           </View>
+        </View>
 
-          {/* ==================================================
-              SUPPORT
-          ================================================== */}
+        {/* ================================================== */}
+        {/* SETTINGS / MENU */}
+        {/* ================================================== */}
 
+        <View
+          style={styles.section}
+        >
           <SectionTitle
-            title="Support"
+            title="Account & Support"
+            icon="grid-outline"
           />
 
-          <MenuCard>
+          <View
+            style={
+              styles.menuGrid
+            }
+          >
             <MenuTile
               icon="help-circle-outline"
               title="Help & Support"
-              onPress={
-                openHelpSupport
+              subtitle="Get assistance"
+              onPress={() =>
+                navigateTo(
+                  "Help_support_screen"
+                )
               }
-            />
-
-            <View
-              style={[
-                styles.divider,
-                {
-                  backgroundColor:
-                    theme.border,
-                },
-              ]}
+              color={
+                colors.orange
+              }
             />
 
             <MenuTile
               icon="shield-checkmark-outline"
-              title="Privacy Policy"
-              onPress={
-                openPrivacyPolicy
-              }
-            />
-          </MenuCard>
-
-          {/* ==================================================
-              ACCOUNT
-          ================================================== */}
-
-          <View
-            style={
-              styles.sectionSpacing
-            }
-          />
-
-          <MenuCard>
-            {/* LOGOUT */}
-
-            <MenuTile
-              icon="log-out-outline"
-              title="Logout"
-              onPress={
-                showLogoutDialog
+              title="Privacy"
+              subtitle="Privacy policy"
+              onPress={() =>
+                navigateTo(
+                  "Privacy_policy_screen"
+                )
               }
               color={
-                COLORS.red
+                colors.greenDot
               }
             />
+          </View>
+        </View>
 
-            <View
+        {/* ================================================== */}
+        {/* LOGOUT */}
+        {/* ================================================== */}
+
+        <View
+          style={styles.section}
+        >
+          <MenuCard
+            icon="log-out-outline"
+            title="Logout"
+            subtitle="Sign out of your account"
+            color={
+              colors.orange
+            }
+            onPress={
+              handleLogout
+            }
+          />
+        </View>
+
+        {/* ================================================== */}
+        {/* DELETE ACCOUNT */}
+        {/* ================================================== */}
+
+        <View
+          style={[
+            styles.deleteSection,
+            {
+              borderTopColor:
+                theme.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={
+              handleDeleteAccount
+            }
+            disabled={deleting}
+            style={[
+              styles.deleteButton,
+              {
+                backgroundColor:
+                  colors.card,
+                borderColor:
+                  "rgba(239,68,68,0.30)",
+                opacity:
+                  deleting ? 0.6 : 1,
+              },
+            ]}
+          >
+            {deleting ? (
+              <ActivityIndicator
+                size="small"
+                color={
+                  colors.destructive
+                }
+              />
+            ) : (
+              <Ionicons
+                name="trash-outline"
+                size={19}
+                color={
+                  colors.destructive
+                }
+              />
+            )}
+
+            <Text
               style={[
-                styles.divider,
+                styles.deleteButtonText,
                 {
-                  backgroundColor:
-                    theme.border,
+                  color:
+                    colors.destructive,
                 },
               ]}
-            />
+            >
+              {deleting
+                ? "Deleting Account..."
+                : "Delete Account"}
+            </Text>
+          </TouchableOpacity>
 
-            {/* DELETE */}
+          <Text
+            style={[
+              styles.deleteWarning,
+              {
+                color:
+                  theme.muted,
+              },
+            ]}
+          >
+            Deleting your account is permanent
+            and cannot be undone.
+          </Text>
+        </View>
 
-            <MenuTile
-              icon="trash-outline"
-              title="Delete Account"
-              onPress={
-                showDeleteAccountDialog
-              }
-              color={
-                COLORS.red
-              }
-            />
-          </MenuCard>
+        {/* ================================================== */}
+        {/* FOOTER */}
+        {/* ================================================== */}
 
-          <View
-            style={
-              styles.bottomSpacing
-            }
-          />
+        <View
+          style={styles.footer}
+        >
+          <Text
+            style={[
+              styles.footerText,
+              {
+                color:
+                  theme.muted,
+              },
+            ]}
+          >
+            HomeCookt
+          </Text>
+
+          <Text
+            style={[
+              styles.footerVersion,
+              {
+                color:
+                  theme.muted,
+              },
+            ]}
+          >
+            Your favorite home-cooked meals
+          </Text>
         </View>
       </ScrollView>
-
-      {/* ======================================================
-          DELETE LOADING OVERLAY
-      ====================================================== */}
-
-      {isDeleting && (
-        <View
-          style={
-            styles.deleteOverlay
-          }
-        >
-          <View
-            style={[
-              styles.deleteLoadingBox,
-              {
-                backgroundColor:
-                  theme.card,
-              },
-            ]}
-          >
-            <ActivityIndicator
-              size="large"
-              color={
-                COLORS.orange
-              }
-            />
-
-            <Text
-              style={[
-                styles.deleteLoadingText,
-                {
-                  color:
-                    theme.foreground,
-                },
-              ]}
-            >
-              Deleting account...
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* ======================================================
-          LOGOUT LOADING OVERLAY
-      ====================================================== */}
-
-      {isLoggingOut && (
-        <View
-          style={
-            styles.deleteOverlay
-          }
-        >
-          <View
-            style={[
-              styles.deleteLoadingBox,
-              {
-                backgroundColor:
-                  theme.card,
-              },
-            ]}
-          >
-            <ActivityIndicator
-              size="large"
-              color={
-                COLORS.orange
-              }
-            />
-
-            <Text
-              style={[
-                styles.deleteLoadingText,
-                {
-                  color:
-                    theme.foreground,
-                },
-              ]}
-            >
-              Logging out...
-            </Text>
-          </View>
-        </View>
-      )}
     </SafeAreaView>
   );
-};
-
-// ============================================================
-// DIMENSIONS
-// ============================================================
-
-const { width } =
-  Dimensions.get("window");
+}
 
 // ============================================================
 // STYLES
@@ -2513,68 +1817,70 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  scrollView: {
+    flex: 1,
+  },
+
   scrollContent: {
-    paddingBottom: 30,
+    paddingBottom: 40,
   },
 
   // ==========================================================
   // LOADING
   // ==========================================================
 
-  loadingScreen: {
+  loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 24,
   },
 
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    fontWeight: "500",
+    marginTop: 14,
+    fontSize: 15,
+    fontWeight: "600",
   },
 
   // ==========================================================
-  // EMPTY
+  // ERROR
   // ==========================================================
 
-  emptyScreen: {
+  errorContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 30,
+    paddingHorizontal: 28,
   },
 
-  emptyIcon: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor:
-      "rgba(249,115,22,0.10)",
+  errorIconContainer: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 18,
+    marginBottom: 20,
   },
 
-  emptyTitle: {
+  errorTitle: {
     fontSize: 21,
-    fontWeight: "700",
+    fontWeight: "800",
     textAlign: "center",
   },
 
-  emptyMessage: {
-    marginTop: 10,
+  errorMessage: {
     fontSize: 14,
     lineHeight: 21,
     textAlign: "center",
+    marginTop: 9,
+    marginBottom: 24,
   },
 
   retryButton: {
-    marginTop: 22,
+    minWidth: 130,
     height: 46,
-    paddingHorizontal: 24,
-    borderRadius: 24,
-    backgroundColor:
-      COLORS.orange,
+    borderRadius: 23,
+    paddingHorizontal: 22,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -2582,23 +1888,18 @@ const styles = StyleSheet.create({
   },
 
   retryButtonText: {
-    color: COLORS.white,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   },
 
   loginButton: {
-    marginTop: 12,
-    height: 46,
-    paddingHorizontal: 30,
-    borderRadius: 24,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
+    marginTop: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
   },
 
   loginButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   },
 
@@ -2606,270 +1907,222 @@ const styles = StyleSheet.create({
   // HEADER
   // ==========================================================
 
-  profileHeader: {
-    minHeight: 350,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 55,
-    paddingBottom: 30,
-    position: "relative",
+  header: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 22,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
   },
 
-  // ==========================================================
-  // SETTINGS
-  // ==========================================================
-
-  settingsButton: {
-    position: "absolute",
-    top: 18,
-    right: 18,
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+  headerTop: {
+    minHeight: 42,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor:
-      "rgba(255,255,255,0.20)",
+    justifyContent: "space-between",
   },
 
-  // ==========================================================
-  // PROFILE IMAGE
-  // ==========================================================
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
 
-  profileImageWrapper: {
-    width: 116,
-    height: 116,
-    borderRadius: 58,
-    backgroundColor:
-      "rgba(255,255,255,0.25)",
+  settingsButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    padding: 4,
-    marginBottom: 14,
+  },
+
+  profileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+  },
+
+  profileImageWrapper: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    borderWidth: 3,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
   },
 
   profileImage: {
-    width: 108,
-    height: 108,
-    borderRadius: 54,
-    backgroundColor:
-      COLORS.white,
+    width: "100%",
+    height: "100%",
   },
 
-  defaultProfileImage: {
+  profileImagePlaceholder: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  // ==========================================================
-  // NAME
-  // ==========================================================
-
-  profileName: {
-    color: COLORS.white,
-    fontSize: 24,
-    fontWeight: "700",
-    textAlign: "center",
-    maxWidth: width - 60,
+  profileNameContainer: {
+    marginLeft: 16,
+    flex: 1,
   },
 
-  // ==========================================================
-  // EMAIL
-  // ==========================================================
-
-  profileEmail: {
-    marginTop: 6,
-    color:
-      "rgba(255,255,255,0.90)",
-    fontSize: 14,
-    textAlign: "center",
-    maxWidth: width - 60,
-  },
-
-  // ==========================================================
-  // ROLE
-  // ==========================================================
-
-  roleBadge: {
-    marginTop: 10,
-    paddingHorizontal: 13,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor:
-      "rgba(255,255,255,0.90)",
+  nameRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
+  },
+
+  profileName: {
+    fontSize: 22,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+
+  verifiedIcon: {
+    marginLeft: 6,
+  },
+
+  profileEmail: {
+    marginTop: 5,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+
+  roleBadge: {
+    alignSelf: "flex-start",
+    marginTop: 9,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
 
   roleBadgeText: {
-    color: COLORS.orange,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "800",
   },
 
-  // ==========================================================
-  // EDIT
-  // ==========================================================
-
-  editButton: {
-    marginTop: 16,
-    height: 44,
-    paddingHorizontal: 20,
-    backgroundColor:
-      COLORS.white,
-    borderRadius: 30,
+  editProfileButton: {
+    height: 45,
+    borderRadius: 23,
+    marginTop: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
+    gap: 8,
   },
 
-  editButtonText: {
-    color: COLORS.orange,
+  editProfileText: {
     fontSize: 14,
-    fontWeight: "700",
-  },
-
-  // ==========================================================
-  // CONTENT
-  // ==========================================================
-
-  content: {
-    padding: 16,
+    fontWeight: "800",
   },
 
   // ==========================================================
   // STATS
   // ==========================================================
 
-  statsRow: {
+  statsContainer: {
     flexDirection: "row",
-    alignItems: "stretch",
-  },
-
-  statGap: {
-    width: 10,
+    paddingHorizontal: 14,
+    marginTop: 16,
+    gap: 10,
   },
 
   statCard: {
     flex: 1,
-    minHeight: 118,
-    paddingVertical: 14,
+    minHeight: 116,
+    borderRadius: 17,
+    borderWidth: 1,
     paddingHorizontal: 8,
-    borderRadius: 20,
+    paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
-
-    shadowColor: "#000",
-
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 2,
     },
-
-    shadowOpacity: 0.05,
-    shadowRadius: 15,
-
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
     elevation: 2,
+  },
+
+  statIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 7,
   },
 
   statValue: {
-    marginTop: 8,
-    fontSize: 13,
-    fontWeight: "700",
-    textAlign: "center",
+    fontSize: 20,
+    fontWeight: "800",
   },
 
   statLabel: {
-    marginTop: 4,
     fontSize: 11,
+    fontWeight: "600",
+    marginTop: 2,
     textAlign: "center",
   },
 
   // ==========================================================
-  // SECTION
+  // SECTIONS
   // ==========================================================
 
+  section: {
+    marginTop: 24,
+    paddingHorizontal: 16,
+  },
+
   sectionTitleContainer: {
-    marginTop: 22,
-    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 11,
+  },
+
+  sectionTitleIcon: {
+    marginRight: 7,
   },
 
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "800",
   },
 
   // ==========================================================
-  // MENU CARD
+  // INFO CARD
   // ==========================================================
 
-  menuCard: {
-    borderRadius: 20,
+  infoCard: {
+    borderRadius: 18,
+    borderWidth: 1,
     overflow: "hidden",
-
-    shadowColor: "#000",
-
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 2,
     },
-
     shadowOpacity: 0.05,
-    shadowRadius: 15,
-
+    shadowRadius: 7,
     elevation: 2,
   },
 
-  // ==========================================================
-  // MENU TILE
-  // ==========================================================
-
-  menuTile: {
-    minHeight: 62,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  menuIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 13,
-  },
-
-  menuTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "500",
-  },
-
-  // ==========================================================
-  // INFO ROW
-  // ==========================================================
-
   infoRow: {
-    minHeight: 72,
-    paddingHorizontal: 16,
+    minHeight: 66,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
+    borderBottomWidth: 1,
   },
 
-  infoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  infoIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 13,
+    marginRight: 12,
   },
 
   infoContent: {
@@ -2878,125 +2131,206 @@ const styles = StyleSheet.create({
 
   infoLabel: {
     fontSize: 11,
+    fontWeight: "600",
     marginBottom: 3,
   },
 
   infoValue: {
     fontSize: 14,
+    lineHeight: 20,
     fontWeight: "600",
   },
 
   // ==========================================================
-  // DIVIDER
+  // SPENDING
   // ==========================================================
 
-  divider: {
-    height: 1,
-    marginLeft: 69,
-  },
-
-  // ==========================================================
-  // ORDER STATS
-  // ==========================================================
-
-  orderStatsGrid: {
+  spendingCard: {
+    minHeight: 82,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 15,
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  orderStatCard: {
-    width: "48.3%",
-    minHeight: 145,
-    borderRadius: 20,
-    padding: 16,
     alignItems: "center",
-    justifyContent: "center",
-
-    shadowColor: "#000",
-
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 2,
     },
-
     shadowOpacity: 0.05,
-    shadowRadius: 15,
-
+    shadowRadius: 7,
     elevation: 2,
   },
 
-  orderStatIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 15,
+  spendingIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor:
       "rgba(249,115,22,0.10)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
   },
 
-  orderStatValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
+  spendingContent: {
+    flex: 1,
+    marginLeft: 13,
   },
 
-  orderStatLabel: {
-    marginTop: 5,
+  spendingLabel: {
     fontSize: 12,
-    textAlign: "center",
-  },
-
-  // ==========================================================
-  // SPACING
-  // ==========================================================
-
-  sectionSpacing: {
-    height: 18,
-  },
-
-  bottomSpacing: {
-    height: 30,
-  },
-
-  // ==========================================================
-  // LOADING OVERLAY
-  // ==========================================================
-
-  deleteOverlay: {
-    position: "absolute",
-
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-
-    backgroundColor:
-      "rgba(0,0,0,0.45)",
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    zIndex: 999,
-    elevation: 999,
-  },
-
-  deleteLoadingBox: {
-    width: 210,
-    paddingVertical: 25,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  deleteLoadingText: {
-    marginTop: 12,
-    fontSize: 14,
     fontWeight: "600",
   },
-});
 
-export default ProfileScreen;
+  spendingValue: {
+    fontSize: 21,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+
+  // ==========================================================
+  // MENU GRID
+  // ==========================================================
+
+  menuGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  menuTile: {
+    width: "48%",
+    minHeight: 118,
+    borderRadius: 17,
+    borderWidth: 1,
+    padding: 13,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 7,
+    elevation: 2,
+  },
+
+  menuTileIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  menuTileTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 11,
+  },
+
+  menuTileSubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 3,
+  },
+
+  // ==========================================================
+  // MENU CARD
+  // ==========================================================
+
+  menuCard: {
+    minHeight: 72,
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 7,
+    elevation: 2,
+  },
+
+  menuIconContainer: {
+    width: 43,
+    height: 43,
+    borderRadius: 21.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  menuTextContainer: {
+    flex: 1,
+    marginLeft: 13,
+    marginRight: 8,
+  },
+
+  menuTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  menuSubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 3,
+  },
+
+  // ==========================================================
+  // DELETE
+  // ==========================================================
+
+  deleteSection: {
+    marginTop: 30,
+    marginHorizontal: 16,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    alignItems: "center",
+  },
+
+  deleteButton: {
+    minHeight: 46,
+    paddingHorizontal: 20,
+    borderRadius: 23,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  deleteButtonText: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  deleteWarning: {
+    fontSize: 11,
+    fontWeight: "500",
+    textAlign: "center",
+    marginTop: 9,
+  },
+
+  // ==========================================================
+  // FOOTER
+  // ==========================================================
+
+  footer: {
+    alignItems: "center",
+    paddingTop: 30,
+    paddingBottom: 8,
+  },
+
+  footerText: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  footerVersion: {
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 4,
+  },
+});

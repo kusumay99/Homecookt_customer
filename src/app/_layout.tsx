@@ -15,7 +15,6 @@ import {
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { Stack } from "expo-router";
 
 // ============================================================
@@ -25,24 +24,121 @@ import { Stack } from "expo-router";
 const THEME_KEY = "app_theme";
 
 // ============================================================
+// THEME COLORS
+// ============================================================
+
+export const AppColors = {
+  light: {
+    orange: "#F97316",
+    gold: "#FBBF24",
+    cream: "#FEF3C7",
+
+    background: "#FEF8F3",
+    card: "#FFFFFF",
+
+    foreground: "#1A1614",
+    muted: "#F5F5F4",
+    mutedForeground: "#78716C",
+
+    warmGray: "#78716C",
+
+    border: "rgba(251, 191, 36, 0.15)",
+
+    destructive: "#EF4444",
+    greenDot: "#22C55E",
+
+    inputBackground: "#F5F5F4",
+
+    quantityBackground: "#FFFFFF",
+
+    backgroundSelected: "#FFF2E8",
+
+    text: "#1A1614",
+    textSecondary: "#78716C",
+
+    white: "#FFFFFF",
+    black: "#000000",
+
+    glassBackground: "rgba(255,255,255,0.70)",
+    glassBorder: "rgba(251,191,36,0.20)",
+
+    shadowColor: "#F97316",
+  },
+
+  dark: {
+    orange: "#F97316",
+    gold: "#FBBF24",
+    cream: "#FEF3C7",
+
+    background: "#0F0E0D",
+    card: "#1A1614",
+
+    foreground: "#FEF8F3",
+    muted: "#2A2420",
+    mutedForeground: "#A8A29E",
+
+    warmGray: "#A8A29E",
+
+    border: "rgba(251, 191, 36, 0.20)",
+
+    destructive: "#EF4444",
+    greenDot: "#22C55E",
+
+    inputBackground: "#2A2420",
+
+    quantityBackground: "#211C19",
+
+    backgroundSelected: "#342A24",
+
+    text: "#FEF8F3",
+    textSecondary: "#B0AAA5",
+
+    white: "#FFFFFF",
+    black: "#000000",
+
+    glassBackground: "rgba(26,22,20,0.90)",
+    glassBorder: "rgba(251,191,36,0.20)",
+
+    shadowColor: "#000000",
+  },
+} as const;
+
+// ============================================================
 // TYPES
 // ============================================================
 
-export type ThemeMode = "light" | "dark" | "system";
+export type ThemeMode =
+  | "light"
+  | "dark"
+  | "system";
+
+export type AppThemeColors =
+  | typeof AppColors.light
+  | typeof AppColors.dark;
 
 interface AppContextType {
   themeMode: ThemeMode;
+
   isDarkMode: boolean;
+
+  colors: AppThemeColors;
+
   toggleTheme: () => Promise<void>;
-  changeTheme: (mode: ThemeMode) => Promise<void>;
+
+  changeTheme: (
+    mode: ThemeMode
+  ) => Promise<void>;
 }
 
 interface HomeContextType {
   refreshHome: number;
+
   homeLoading: boolean;
+
   setHomeLoading: React.Dispatch<
     React.SetStateAction<boolean>
   >;
+
   refresh: () => void;
 }
 
@@ -50,9 +146,10 @@ interface HomeContextType {
 // APP CONTEXT
 // ============================================================
 
-const AppContext = createContext<
-  AppContextType | undefined
->(undefined);
+const AppContext =
+  createContext<AppContextType | undefined>(
+    undefined
+  );
 
 // ============================================================
 // APP HOOK
@@ -74,7 +171,7 @@ export const useApp = (): AppContextType => {
 // APP PROVIDER
 // ============================================================
 
-const AppProvider = ({
+export const AppProvider = ({
   children,
 }: {
   children: React.ReactNode;
@@ -114,40 +211,59 @@ const AppProvider = ({
   }, []);
 
   // ==========================================================
-  // LOAD THEME
+  // LOAD SAVED THEME
   // ==========================================================
 
   useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const savedTheme =
+          await AsyncStorage.getItem(
+            THEME_KEY
+          );
+
+        if (
+          savedTheme === "light" ||
+          savedTheme === "dark" ||
+          savedTheme === "system"
+        ) {
+          setThemeMode(savedTheme);
+        } else {
+          setThemeMode("light");
+        }
+      } catch (error) {
+        console.error(
+          "LOAD THEME ERROR:",
+          error
+        );
+
+        setThemeMode("light");
+      } finally {
+        setIsLoadingTheme(false);
+      }
+    };
+
     loadTheme();
   }, []);
 
-  const loadTheme = async () => {
-    try {
-      const savedTheme =
-        await AsyncStorage.getItem(
-          THEME_KEY
-        );
+  // ==========================================================
+  // DARK MODE
+  // ==========================================================
 
-      if (
-        savedTheme === "light" ||
-        savedTheme === "dark" ||
-        savedTheme === "system"
-      ) {
-        setThemeMode(savedTheme);
-      } else {
-        setThemeMode("light");
-      }
-    } catch (error) {
-      console.error(
-        "LOAD THEME ERROR:",
-        error
-      );
+  const isDarkMode =
+    themeMode === "dark" ||
+    (
+      themeMode === "system" &&
+      systemScheme === "dark"
+    );
 
-      setThemeMode("light");
-    } finally {
-      setIsLoadingTheme(false);
-    }
-  };
+  // ==========================================================
+  // CURRENT COLORS
+  // ==========================================================
+
+  const colors = isDarkMode
+    ? AppColors.dark
+    : AppColors.light;
 
   // ==========================================================
   // TOGGLE THEME
@@ -156,7 +272,9 @@ const AppProvider = ({
   const toggleTheme = async () => {
     try {
       const newTheme: ThemeMode =
-        isDarkMode ? "light" : "dark";
+        isDarkMode
+          ? "light"
+          : "dark";
 
       setThemeMode(newTheme);
 
@@ -195,17 +313,6 @@ const AppProvider = ({
   };
 
   // ==========================================================
-  // DARK MODE
-  // ==========================================================
-
-  const isDarkMode =
-    themeMode === "dark" ||
-    (
-      themeMode === "system" &&
-      systemScheme === "dark"
-    );
-
-  // ==========================================================
   // CONTEXT VALUE
   // ==========================================================
 
@@ -213,24 +320,41 @@ const AppProvider = ({
     () => ({
       themeMode,
       isDarkMode,
+      colors,
       toggleTheme,
       changeTheme,
     }),
     [
       themeMode,
       isDarkMode,
+      colors,
     ]
   );
 
   // ==========================================================
-  // LOADING
+  // THEME LOADING
   // ==========================================================
 
   if (isLoadingTheme) {
     return (
-      <View style={styles.loadingContainer}>
+      <View
+        style={[
+          styles.loadingContainer,
+          {
+            backgroundColor:
+              isDarkMode
+                ? AppColors.dark.background
+                : AppColors.light.background,
+          },
+        ]}
+      >
         <ActivityIndicator
           size="large"
+          color={
+            isDarkMode
+              ? AppColors.dark.orange
+              : AppColors.light.orange
+          }
         />
       </View>
     );
@@ -272,7 +396,7 @@ export const useHome = (): HomeContextType => {
 // HOME PROVIDER
 // ============================================================
 
-const HomeProvider = ({
+export const HomeProvider = ({
   children,
 }: {
   children: React.ReactNode;
@@ -328,7 +452,10 @@ export default function RootLayout() {
 // ============================================================
 
 function RootNavigator() {
-  const { isDarkMode } = useApp();
+  const {
+    isDarkMode,
+    colors,
+  } = useApp();
 
   return (
     <>
@@ -339,30 +466,20 @@ function RootNavigator() {
             : "dark-content"
         }
         backgroundColor={
-          isDarkMode
-            ? "#121212"
-            : "#FFFFFF"
+          colors.background
         }
       />
-
-      {/*
-        Expo Router automatically discovers all
-        .js / .jsx / .ts / .tsx files inside app/.
-
-        Therefore we do NOT manually register
-        individual screen names here.
-      */}
 
       <Stack
         screenOptions={{
           headerShown: false,
-          animation: "slide_from_right",
+
+          animation:
+            "slide_from_right",
 
           contentStyle: {
             backgroundColor:
-              isDarkMode
-                ? "#121212"
-                : "#FEF8F3",
+              colors.background,
           },
         }}
       />
@@ -379,7 +496,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FEF8F3",
   },
 });
-

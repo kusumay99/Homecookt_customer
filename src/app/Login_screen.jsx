@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -12,7 +13,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -702,23 +703,18 @@ const LoginScreen = () => {
                 {/* ================================================= */}
 
                 <LinearGradient
-                  colors={[
-                    COLORS.orange,
-                    COLORS.gold,
-                  ]}
-                  start={{
-                    x: 0,
-                    y: 0,
-                  }}
-                  end={{
-                    x: 1,
-                    y: 1,
-                  }}
-                  style={styles.logoContainer}
+                  colors={[COLORS.orange, COLORS.gold]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.logoOuter}
                 >
-                  <Text style={styles.logoEmoji}>
-                    🍳
-                  </Text>
+                  <View style={styles.logoInner}>
+                    <Image
+                      source={require("../../assets/images/home-cookt-logo.png")}
+                      style={styles.logoImage}
+                      resizeMode="contain"
+                    />
+                  </View>
                 </LinearGradient>
 
                 {/* ================================================= */}
@@ -918,32 +914,42 @@ const styles = StyleSheet.create({
   // LOGO
   // ==========================================================
 
-  logoContainer: {
-    width: 90,
-    height: 90,
-
-    borderRadius: 28,
+  logoOuter: {
+    width: 128,
+    height: 128,
+    borderRadius: 36,
 
     alignItems: "center",
     justifyContent: "center",
 
     shadowColor: "#000",
-
     shadowOffset: {
       width: 0,
-      height: 5,
+      height: 7,
     },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
 
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-
-    elevation: 4,
+    elevation: 7,
   },
 
-  logoEmoji: {
-    fontSize: 42,
+  logoInner: {
+    width: 114,
+    height: 114,
+    borderRadius: 32,
+
+    backgroundColor: COLORS.white,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    overflow: "hidden",
   },
 
+  logoImage: {
+    width: 98,
+    height: 98,
+  },
   // ==========================================================
   // TITLE
   // ==========================================================

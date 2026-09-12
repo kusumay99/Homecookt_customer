@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
+
 import {
+  ActivityIndicator,
+  Alert,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -13,42 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 
-// ============================================================
-// OPTIONAL APP THEME CONTEXT
-// ============================================================
-//
-// This works with the AppProvider/useApp that you already
-// have in your app/_layout.tsx.
-//
-// If useApp is exported from another file in your project,
-// change the import path below.
-//
-// ============================================================
-
 import { useApp } from "./_layout";
-
-// ============================================================
-// COLORS
-// ============================================================
-
-const COLORS = {
-  orange: "#F28C28",
-  gold: "#F5B83D",
-  cream: "#FFF4E5",
-
-  background: "#F7F8FA",
-  card: "#FFFFFF",
-  foreground: "#181818",
-  mutedForeground: "#777777",
-
-  darkBackground: "#121212",
-  darkCard: "#1E1E1E",
-  darkForeground: "#FFFFFF",
-  darkMutedForeground: "#AAAAAA",
-
-  border: "rgba(245, 184, 61, 0.15)",
-  darkBorder: "rgba(255,255,255,0.08)",
-};
 
 // ============================================================
 // STORAGE KEYS
@@ -63,6 +31,18 @@ const STORAGE_KEYS = {
 };
 
 // ============================================================
+// DEFAULT SETTINGS
+// ============================================================
+
+const DEFAULT_SETTINGS = {
+  pushNotifications: true,
+  emailUpdates: false,
+  promotionalOffers: true,
+  locationAccess: true,
+  analytics: false,
+};
+
+// ============================================================
 // SETTINGS SCREEN
 // ============================================================
 
@@ -70,32 +50,37 @@ const SettingsScreen = () => {
   const router = useRouter();
 
   // ==========================================================
-  // SHARED APP THEME
+  // GLOBAL THEME
   // ==========================================================
 
-  const { isDarkMode, toggleTheme } = useApp();
+  const {
+    isDarkMode,
+    colors,
+    toggleTheme,
+  } = useApp();
 
   // ==========================================================
   // SETTINGS STATE
   // ==========================================================
 
   const [pushNotifications, setPushNotifications] =
-    useState(true);
+    useState(DEFAULT_SETTINGS.pushNotifications);
 
   const [emailUpdates, setEmailUpdates] =
-    useState(false);
+    useState(DEFAULT_SETTINGS.emailUpdates);
 
   const [promotionalOffers, setPromotionalOffers] =
-    useState(true);
+    useState(DEFAULT_SETTINGS.promotionalOffers);
 
   const [locationAccess, setLocationAccess] =
-    useState(true);
+    useState(DEFAULT_SETTINGS.locationAccess);
 
   const [analytics, setAnalytics] =
-    useState(false);
+    useState(DEFAULT_SETTINGS.analytics);
 
-  const [isLoading, setIsLoading] =
-    useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [savingKey, setSavingKey] = useState(null);
 
   // ==========================================================
   // LOAD SETTINGS
@@ -104,10 +89,6 @@ const SettingsScreen = () => {
   useEffect(() => {
     loadSettings();
   }, []);
-
-  // ==========================================================
-  // LOAD SETTINGS FROM ASYNC STORAGE
-  // ==========================================================
 
   const loadSettings = async () => {
     try {
@@ -139,19 +120,11 @@ const SettingsScreen = () => {
         ),
       ]);
 
-      // ------------------------------------------------------
-      // PUSH NOTIFICATIONS
-      // ------------------------------------------------------
-
       if (savedPush !== null) {
         setPushNotifications(
           savedPush === "true"
         );
       }
-
-      // ------------------------------------------------------
-      // EMAIL UPDATES
-      // ------------------------------------------------------
 
       if (savedEmail !== null) {
         setEmailUpdates(
@@ -159,29 +132,17 @@ const SettingsScreen = () => {
         );
       }
 
-      // ------------------------------------------------------
-      // PROMOTIONAL OFFERS
-      // ------------------------------------------------------
-
       if (savedPromotional !== null) {
         setPromotionalOffers(
           savedPromotional === "true"
         );
       }
 
-      // ------------------------------------------------------
-      // LOCATION ACCESS
-      // ------------------------------------------------------
-
       if (savedLocation !== null) {
         setLocationAccess(
           savedLocation === "true"
         );
       }
-
-      // ------------------------------------------------------
-      // ANALYTICS
-      // ------------------------------------------------------
 
       if (savedAnalytics !== null) {
         setAnalytics(
@@ -204,6 +165,8 @@ const SettingsScreen = () => {
 
   const saveSetting = async (key, value) => {
     try {
+      setSavingKey(key);
+
       await AsyncStorage.setItem(
         key,
         String(value)
@@ -213,6 +176,13 @@ const SettingsScreen = () => {
         `SAVE SETTING ERROR [${key}]:`,
         error
       );
+
+      Alert.alert(
+        "Error",
+        "Unable to save this setting. Please try again."
+      );
+    } finally {
+      setSavingKey(null);
     }
   };
 
@@ -235,9 +205,7 @@ const SettingsScreen = () => {
   // PUSH NOTIFICATIONS
   // ==========================================================
 
-  const togglePushNotifications = async (
-    value
-  ) => {
+  const togglePushNotifications = async (value) => {
     setPushNotifications(value);
 
     await saveSetting(
@@ -250,9 +218,7 @@ const SettingsScreen = () => {
   // EMAIL UPDATES
   // ==========================================================
 
-  const toggleEmailUpdates = async (
-    value
-  ) => {
+  const toggleEmailUpdates = async (value) => {
     setEmailUpdates(value);
 
     await saveSetting(
@@ -265,9 +231,7 @@ const SettingsScreen = () => {
   // PROMOTIONAL OFFERS
   // ==========================================================
 
-  const togglePromotionalOffers = async (
-    value
-  ) => {
+  const togglePromotionalOffers = async (value) => {
     setPromotionalOffers(value);
 
     await saveSetting(
@@ -280,9 +244,7 @@ const SettingsScreen = () => {
   // LOCATION ACCESS
   // ==========================================================
 
-  const toggleLocationAccess = async (
-    value
-  ) => {
+  const toggleLocationAccess = async (value) => {
     setLocationAccess(value);
 
     await saveSetting(
@@ -295,9 +257,7 @@ const SettingsScreen = () => {
   // ANALYTICS
   // ==========================================================
 
-  const toggleAnalytics = async (
-    value
-  ) => {
+  const toggleAnalytics = async (value) => {
     setAnalytics(value);
 
     await saveSetting(
@@ -307,28 +267,104 @@ const SettingsScreen = () => {
   };
 
   // ==========================================================
-  // THEME COLORS
+  // RESET SETTINGS
   // ==========================================================
 
-  const backgroundColor = isDarkMode
-    ? COLORS.darkBackground
-    : COLORS.background;
+  const resetSettings = () => {
+    Alert.alert(
+      "Reset Settings",
+      "Are you sure you want to restore all settings to their defaults?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setIsLoading(true);
 
-  const cardColor = isDarkMode
-    ? COLORS.darkCard
-    : COLORS.card;
+              await Promise.all([
+                AsyncStorage.setItem(
+                  STORAGE_KEYS.pushNotifications,
+                  String(
+                    DEFAULT_SETTINGS.pushNotifications
+                  )
+                ),
 
-  const textColor = isDarkMode
-    ? COLORS.darkForeground
-    : COLORS.foreground;
+                AsyncStorage.setItem(
+                  STORAGE_KEYS.emailUpdates,
+                  String(
+                    DEFAULT_SETTINGS.emailUpdates
+                  )
+                ),
 
-  const mutedColor = isDarkMode
-    ? COLORS.darkMutedForeground
-    : COLORS.mutedForeground;
+                AsyncStorage.setItem(
+                  STORAGE_KEYS.promotionalOffers,
+                  String(
+                    DEFAULT_SETTINGS.promotionalOffers
+                  )
+                ),
 
-  const borderColor = isDarkMode
-    ? COLORS.darkBorder
-    : COLORS.border;
+                AsyncStorage.setItem(
+                  STORAGE_KEYS.locationAccess,
+                  String(
+                    DEFAULT_SETTINGS.locationAccess
+                  )
+                ),
+
+                AsyncStorage.setItem(
+                  STORAGE_KEYS.analytics,
+                  String(
+                    DEFAULT_SETTINGS.analytics
+                  )
+                ),
+              ]);
+
+              setPushNotifications(
+                DEFAULT_SETTINGS.pushNotifications
+              );
+
+              setEmailUpdates(
+                DEFAULT_SETTINGS.emailUpdates
+              );
+
+              setPromotionalOffers(
+                DEFAULT_SETTINGS.promotionalOffers
+              );
+
+              setLocationAccess(
+                DEFAULT_SETTINGS.locationAccess
+              );
+
+              setAnalytics(
+                DEFAULT_SETTINGS.analytics
+              );
+
+              Alert.alert(
+                "Settings Reset",
+                "All settings have been restored to their default values."
+              );
+            } catch (error) {
+              console.error(
+                "RESET SETTINGS ERROR:",
+                error
+              );
+
+              Alert.alert(
+                "Error",
+                "Unable to reset settings."
+              );
+            } finally {
+              setIsLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // ==========================================================
   // GO BACK
@@ -349,6 +385,7 @@ const SettingsScreen = () => {
   const SettingRow = ({
     icon,
     label,
+    description,
     trailing,
   }) => {
     return (
@@ -359,31 +396,48 @@ const SettingsScreen = () => {
           style={[
             styles.iconContainer,
             {
-              backgroundColor: isDarkMode
-                ? "rgba(242,140,40,0.15)"
-                : COLORS.cream,
+              backgroundColor:
+                isDarkMode
+                  ? "rgba(249,115,22,0.15)"
+                  : colors.backgroundSelected,
             },
           ]}
         >
           <Ionicons
             name={icon}
-            size={18}
-            color={COLORS.orange}
+            size={19}
+            color={colors.orange}
           />
         </View>
 
-        {/* LABEL */}
+        {/* TEXT */}
 
-        <Text
-          style={[
-            styles.rowLabel,
-            {
-              color: textColor,
-            },
-          ]}
-        >
-          {label}
-        </Text>
+        <View style={styles.rowContent}>
+          <Text
+            style={[
+              styles.rowLabel,
+              {
+                color: colors.foreground,
+              },
+            ]}
+          >
+            {label}
+          </Text>
+
+          {description ? (
+            <Text
+              style={[
+                styles.rowDescription,
+                {
+                  color:
+                    colors.mutedForeground,
+                },
+              ]}
+            >
+              {description}
+            </Text>
+          ) : null}
+        </View>
 
         {/* TRAILING */}
 
@@ -408,27 +462,30 @@ const SettingsScreen = () => {
 
     return (
       <View style={styles.section}>
-        {/* SECTION TITLE */}
-
         <Text
           style={[
             styles.sectionTitle,
             {
-              color: mutedColor,
+              color:
+                colors.mutedForeground,
             },
           ]}
         >
           {title}
         </Text>
 
-        {/* SECTION CARD */}
-
         <View
           style={[
             styles.sectionCard,
             {
-              backgroundColor: cardColor,
-              borderColor,
+              backgroundColor:
+                colors.card,
+
+              borderColor:
+                colors.border,
+
+              shadowColor:
+                colors.shadowColor,
             },
           ]}
         >
@@ -436,13 +493,14 @@ const SettingsScreen = () => {
             <React.Fragment key={index}>
               {item}
 
-              {index < items.length - 1 && (
+              {index <
+                items.length - 1 && (
                 <View
                   style={[
                     styles.divider,
                     {
                       backgroundColor:
-                        borderColor,
+                        colors.border,
                     },
                   ]}
                 />
@@ -460,31 +518,48 @@ const SettingsScreen = () => {
 
   const renderSwitch = (
     value,
-    onValueChange
+    onValueChange,
+    storageKey
   ) => {
+    const isSaving =
+      savingKey === storageKey;
+
     return (
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{
-          false: isDarkMode
-            ? "#444444"
-            : "#D5D5D5",
-          true: "#F6C67B",
-        }}
-        thumbColor={
-          value
-            ? COLORS.orange
-            : isDarkMode
-            ? "#AAAAAA"
-            : "#F4F4F4"
-        }
-        ios_backgroundColor={
-          isDarkMode
-            ? "#444444"
-            : "#D5D5D5"
-        }
-      />
+      <View style={styles.switchContainer}>
+        {isSaving ? (
+          <ActivityIndicator
+            size="small"
+            color={colors.orange}
+          />
+        ) : (
+          <Switch
+            value={value}
+            onValueChange={
+              onValueChange
+            }
+            disabled={isSaving}
+            trackColor={{
+              false: isDarkMode
+                ? "#444444"
+                : "#D5D5D5",
+
+              true: colors.gold,
+            }}
+            thumbColor={
+              value
+                ? colors.orange
+                : isDarkMode
+                ? "#AAAAAA"
+                : "#F4F4F4"
+            }
+            ios_backgroundColor={
+              isDarkMode
+                ? "#444444"
+                : "#D5D5D5"
+            }
+          />
+        )}
+      </View>
     );
   };
 
@@ -496,9 +571,10 @@ const SettingsScreen = () => {
     return (
       <View
         style={[
-          styles.container,
+          styles.loadingContainer,
           {
-            backgroundColor,
+            backgroundColor:
+              colors.background,
           },
         ]}
       >
@@ -508,8 +584,27 @@ const SettingsScreen = () => {
               ? "light-content"
               : "dark-content"
           }
-          backgroundColor={backgroundColor}
+          backgroundColor={
+            colors.background
+          }
         />
+
+        <ActivityIndicator
+          size="large"
+          color={colors.orange}
+        />
+
+        <Text
+          style={[
+            styles.loadingText,
+            {
+              color:
+                colors.mutedForeground,
+            },
+          ]}
+        >
+          Loading settings...
+        </Text>
       </View>
     );
   }
@@ -523,13 +618,12 @@ const SettingsScreen = () => {
       style={[
         styles.container,
         {
-          backgroundColor,
+          backgroundColor:
+            colors.background,
         },
       ]}
     >
-      {/* ======================================================
-          STATUS BAR
-      ====================================================== */}
+      {/* STATUS BAR */}
 
       <StatusBar
         barStyle={
@@ -537,77 +631,75 @@ const SettingsScreen = () => {
             ? "light-content"
             : "dark-content"
         }
-        backgroundColor={backgroundColor}
+        backgroundColor={
+          colors.background
+        }
       />
 
-      {/* ======================================================
-          APP BAR
-      ====================================================== */}
+      {/* HEADER */}
 
       <View
         style={[
           styles.header,
           {
-            backgroundColor,
+            backgroundColor:
+              colors.background,
           },
         ]}
       >
-        {/* BACK BUTTON */}
-
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={goBack}
           style={[
             styles.headerBackButton,
             {
-              backgroundColor: isDarkMode
-                ? COLORS.darkCard
-                : "#EEEEF0",
+              backgroundColor:
+                isDarkMode
+                  ? "#252525"
+                  : "#F1F1F1",
             },
           ]}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
         >
           <Ionicons
             name="arrow-back"
             size={21}
-            color={textColor}
+            color={colors.foreground}
           />
         </TouchableOpacity>
-
-        {/* TITLE */}
 
         <Text
           style={[
             styles.headerTitle,
             {
-              color: textColor,
+              color:
+                colors.foreground,
             },
           ]}
         >
           Settings
         </Text>
 
-        {/* SPACER */}
-
-        <View style={styles.headerSpacer} />
+        <View
+          style={styles.headerSpacer}
+        />
       </View>
 
-      {/* ======================================================
-          BODY
-      ====================================================== */}
+      {/* BODY */}
 
       <ScrollView
         style={[
           styles.scrollView,
           {
-            backgroundColor,
+            backgroundColor:
+              colors.background,
           },
         ]}
         contentContainerStyle={
           styles.scrollContent
         }
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={
+          false
+        }
       >
         {/* ====================================================
             APPEARANCE
@@ -621,9 +713,15 @@ const SettingsScreen = () => {
                 : "moon-outline"
             }
             label="Dark Mode"
+            description={
+              isDarkMode
+                ? "Dark appearance is enabled"
+                : "Use a darker appearance"
+            }
             trailing={renderSwitch(
               isDarkMode,
-              handleDarkMode
+              handleDarkMode,
+              "theme"
             )}
           />
         </SettingSection>
@@ -636,27 +734,33 @@ const SettingsScreen = () => {
           <SettingRow
             icon="notifications-outline"
             label="Push Notifications"
+            description="Receive order and account notifications"
             trailing={renderSwitch(
               pushNotifications,
-              togglePushNotifications
+              togglePushNotifications,
+              STORAGE_KEYS.pushNotifications
             )}
           />
 
           <SettingRow
             icon="mail-outline"
             label="Email Updates"
+            description="Receive updates through email"
             trailing={renderSwitch(
               emailUpdates,
-              toggleEmailUpdates
+              toggleEmailUpdates,
+              STORAGE_KEYS.emailUpdates
             )}
           />
 
           <SettingRow
             icon="megaphone-outline"
             label="Promotional Offers"
+            description="Receive offers and special promotions"
             trailing={renderSwitch(
               promotionalOffers,
-              togglePromotionalOffers
+              togglePromotionalOffers,
+              STORAGE_KEYS.promotionalOffers
             )}
           />
         </SettingSection>
@@ -669,18 +773,22 @@ const SettingsScreen = () => {
           <SettingRow
             icon="location-outline"
             label="Location Access"
+            description="Allow HomeCookt to use your location"
             trailing={renderSwitch(
               locationAccess,
-              toggleLocationAccess
+              toggleLocationAccess,
+              STORAGE_KEYS.locationAccess
             )}
           />
 
           <SettingRow
             icon="analytics-outline"
             label="Analytics"
+            description="Help improve HomeCookt with usage data"
             trailing={renderSwitch(
               analytics,
-              toggleAnalytics
+              toggleAnalytics,
+              STORAGE_KEYS.analytics
             )}
           />
         </SettingSection>
@@ -693,12 +801,14 @@ const SettingsScreen = () => {
           <SettingRow
             icon="information-circle-outline"
             label="Version"
+            description="Current HomeCookt version"
             trailing={
               <Text
                 style={[
                   styles.versionText,
                   {
-                    color: mutedColor,
+                    color:
+                      colors.mutedForeground,
                   },
                 ]}
               >
@@ -709,12 +819,109 @@ const SettingsScreen = () => {
         </SettingSection>
 
         {/* ====================================================
-            BOTTOM SPACING
+            RESET
         ==================================================== */}
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={resetSettings}
+          style={[
+            styles.resetButton,
+            {
+              backgroundColor:
+                isDarkMode
+                  ? "#2A1714"
+                  : "#FFF1EC",
+
+              borderColor:
+                isDarkMode
+                  ? "#5A2920"
+                  : "#FFD4C4",
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.resetIcon,
+              {
+                backgroundColor:
+                  isDarkMode
+                    ? "#452019"
+                    : "#FFE1D6",
+              },
+            ]}
+          >
+            <Ionicons
+              name="refresh-outline"
+              size={19}
+              color={colors.orange}
+            />
+          </View>
+
+          <View
+            style={styles.resetContent}
+          >
+            <Text
+              style={[
+                styles.resetTitle,
+                {
+                  color:
+                    colors.foreground,
+                },
+              ]}
+            >
+              Reset Settings
+            </Text>
+
+            <Text
+              style={[
+                styles.resetDescription,
+                {
+                  color:
+                    colors.mutedForeground,
+                },
+              ]}
+            >
+              Restore all settings to default
+            </Text>
+          </View>
+
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={colors.mutedForeground}
+          />
+        </TouchableOpacity>
+
+        {/* BOTTOM */}
 
         <View
           style={styles.bottomSpacing}
         />
+
+        <Text
+          style={[
+            styles.footerText,
+            {
+              color:
+                colors.mutedForeground,
+            },
+          ]}
+        >
+          HomeCookt
+        </Text>
+
+        <Text
+          style={[
+            styles.footerVersion,
+            {
+              color:
+                colors.mutedForeground,
+            },
+          ]}
+        >
+          Version 1.0.0
+        </Text>
       </ScrollView>
     </View>
   );
@@ -725,12 +932,19 @@ const SettingsScreen = () => {
 // ============================================================
 
 const styles = StyleSheet.create({
-  // ==========================================================
-  // CONTAINER
-  // ==========================================================
-
   container: {
     flex: 1,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
   },
 
   // ==========================================================
@@ -788,7 +1002,7 @@ const styles = StyleSheet.create({
   // ==========================================================
 
   section: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
 
   sectionTitle: {
@@ -796,7 +1010,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
 
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
+
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 
   sectionCard: {
@@ -806,11 +1023,11 @@ const styles = StyleSheet.create({
 
     overflow: "hidden",
 
-    shadowColor: "#000000",
     shadowOffset: {
       width: 0,
       height: 2,
     },
+
     shadowOpacity: 0.04,
     shadowRadius: 6,
 
@@ -822,13 +1039,13 @@ const styles = StyleSheet.create({
   // ==========================================================
 
   row: {
-    minHeight: 66,
+    minHeight: 72,
 
     flexDirection: "row",
     alignItems: "center",
 
     paddingHorizontal: 16,
-    paddingVertical: 4,
+    paddingVertical: 10,
   },
 
   // ==========================================================
@@ -836,26 +1053,37 @@ const styles = StyleSheet.create({
   // ==========================================================
 
   iconContainer: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
 
-    borderRadius: 10,
+    borderRadius: 11,
 
     alignItems: "center",
     justifyContent: "center",
   },
 
   // ==========================================================
-  // LABEL
+  // CONTENT
   // ==========================================================
 
-  rowLabel: {
+  rowContent: {
     flex: 1,
 
     marginLeft: 14,
+    paddingRight: 10,
+  },
 
+  rowLabel: {
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
+  },
+
+  rowDescription: {
+    marginTop: 3,
+
+    fontSize: 11.5,
+
+    lineHeight: 16,
   },
 
   // ==========================================================
@@ -863,7 +1091,16 @@ const styles = StyleSheet.create({
   // ==========================================================
 
   trailing: {
-    marginLeft: 10,
+    marginLeft: 6,
+
+    minWidth: 45,
+
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  switchContainer: {
+    minWidth: 45,
 
     alignItems: "center",
     justifyContent: "center",
@@ -871,6 +1108,7 @@ const styles = StyleSheet.create({
 
   versionText: {
     fontSize: 13,
+    fontWeight: "600",
   },
 
   // ==========================================================
@@ -880,15 +1118,76 @@ const styles = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
 
-    marginLeft: 52,
+    marginLeft: 68,
   },
 
   // ==========================================================
-  // BOTTOM
+  // RESET
+  // ==========================================================
+
+  resetButton: {
+    minHeight: 70,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    paddingHorizontal: 14,
+
+    borderRadius: 16,
+
+    borderWidth: 1,
+
+    marginTop: 2,
+  },
+
+  resetIcon: {
+    width: 38,
+    height: 38,
+
+    borderRadius: 11,
+
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  resetContent: {
+    flex: 1,
+
+    marginLeft: 12,
+  },
+
+  resetTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  resetDescription: {
+    marginTop: 3,
+
+    fontSize: 11.5,
+  },
+
+  // ==========================================================
+  // FOOTER
   // ==========================================================
 
   bottomSpacing: {
-    height: 60,
+    height: 45,
+  },
+
+  footerText: {
+    textAlign: "center",
+
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  footerVersion: {
+    textAlign: "center",
+
+    marginTop: 4,
+
+    fontSize: 11,
   },
 });
 

@@ -26,26 +26,24 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const BASE_URL = "https://api.homecookt.com";
+import { useApp } from "./_layout";
 
-const COLORS = {
-  orange: "#F97316",
-  gold: "#FBBF24",
-  background: "#FEF8F3",
-  dark: "#0F0E0D",
-  white: "#FFFFFF",
-  muted: "#777777",
-  lightMuted: "#999999",
-  border: "#EEEEEE",
-  lightOrange: "#FFF1E7",
-  green: "#16A34A",
-  red: "#EF4444",
-  star: "#FBBF24",
-};
+const BASE_URL = "https://api.homecookt.com";
 
 const SHOW_DELETE_BUTTON = false;
 
 export default function DishDetailScreen() {
+  // ============================================================
+  // APP THEME
+  // ============================================================
+
+  const { isDarkMode, colors } = useApp();
+
+  const styles = useMemo(
+    () => createStyles(colors),
+    [colors]
+  );
+
   // ============================================================
   // EXPO ROUTER PARAMS
   // ============================================================
@@ -244,6 +242,7 @@ export default function DishDetailScreen() {
         favorites = favorites.filter(
           (item) => String(item) !== String(dishId)
         );
+
         setIsFavorite(false);
       } else {
         favorites.push(dishId);
@@ -276,6 +275,8 @@ export default function DishDetailScreen() {
     }
 
     try {
+      setLoading(true);
+
       const response = await fetch(
         `${BASE_URL}/api/v1/food/${dishId}`
       );
@@ -318,12 +319,20 @@ export default function DishDetailScreen() {
           ...normalized,
         }));
       }
+
+      setErrorMessage("");
     } catch (error) {
-      console.log("FETCH FOOD DETAIL ERROR =>", error);
+      console.log(
+        "FETCH FOOD DETAIL ERROR =>",
+        error
+      );
+
       setErrorMessage(
         error?.message ||
         "Unable to load food details."
       );
+    } finally {
+      setLoading(false);
     }
   }, [dishId, normalizeFood]);
 
@@ -377,7 +386,11 @@ export default function DishDetailScreen() {
           : []
       );
     } catch (error) {
-      console.log("FETCH REVIEWS ERROR =>", error);
+      console.log(
+        "FETCH REVIEWS ERROR =>",
+        error
+      );
+
       setReviews([]);
     } finally {
       setReviewsLoading(false);
@@ -418,7 +431,10 @@ export default function DishDetailScreen() {
         Array.isArray(data) ? data : []
       );
     } catch (error) {
-      console.log("FOOD ITEMS ERROR =>", error);
+      console.log(
+        "FOOD ITEMS ERROR =>",
+        error
+      );
     }
   }, []);
 
@@ -488,6 +504,7 @@ export default function DishDetailScreen() {
         "Error",
         "Food ID is missing."
       );
+
       return null;
     }
 
@@ -500,6 +517,7 @@ export default function DishDetailScreen() {
         "Login Required",
         "Please login to add food to your cart."
       );
+
       return null;
     }
 
@@ -568,21 +586,16 @@ export default function DishDetailScreen() {
     setAddingToCart(true);
 
     try {
-      const result = await addToCartRequest(false);
+      const result =
+        await addToCartRequest(false);
 
       if (!result) return;
 
-      // ==========================================================
-      // SUCCESS → GO DIRECTLY TO CART SCREEN
-      // ==========================================================
       if (result.ok) {
         router.replace("/Cart_screen");
         return;
       }
 
-      // ==========================================================
-      // ANOTHER KITCHEN → ASK TO REPLACE CART
-      // ==========================================================
       const replaceRequired =
         result?.data?.replace_required === true ||
         result?.data?.replaceRequired === true;
@@ -607,8 +620,6 @@ export default function DishDetailScreen() {
                     await addToCartRequest(true);
 
                   if (replaceResult?.ok) {
-                    // After replacing the cart successfully,
-                    // go directly to Cart screen.
                     router.replace("/Cart_screen");
                   } else {
                     Alert.alert(
@@ -640,9 +651,6 @@ export default function DishDetailScreen() {
         return;
       }
 
-      // ==========================================================
-      // OTHER API ERROR
-      // ==========================================================
       Alert.alert(
         "Unable to Add",
         result?.data?.detail ||
@@ -677,6 +685,7 @@ export default function DishDetailScreen() {
         "Error",
         "Food ID is missing."
       );
+
       return;
     }
 
@@ -685,6 +694,7 @@ export default function DishDetailScreen() {
         "Review Required",
         "Please write a review before submitting."
       );
+
       return;
     }
 
@@ -697,6 +707,7 @@ export default function DishDetailScreen() {
         "Login Required",
         "Please login to submit a review."
       );
+
       return;
     }
 
@@ -775,7 +786,6 @@ export default function DishDetailScreen() {
 
   // ============================================================
   // DELETE FOOD
-  // CUSTOMER SCREEN - DISABLED
   // ============================================================
 
   const deleteFood = async () => {
@@ -792,6 +802,7 @@ export default function DishDetailScreen() {
         {
           text: "Delete",
           style: "destructive",
+
           onPress: async () => {
             try {
               const currentToken =
@@ -806,7 +817,8 @@ export default function DishDetailScreen() {
                   method: "DELETE",
 
                   headers: {
-                    Authorization: `Bearer ${currentToken}`,
+                    Authorization:
+                      `Bearer ${currentToken}`,
                   },
                 }
               );
@@ -975,7 +987,9 @@ export default function DishDetailScreen() {
           <TouchableOpacity
             key={star}
             disabled={!interactive}
-            activeOpacity={interactive ? 0.7 : 1}
+            activeOpacity={
+              interactive ? 0.7 : 1
+            }
             onPress={() =>
               interactive &&
               onSelect &&
@@ -994,7 +1008,7 @@ export default function DishDetailScreen() {
                   : "star-outline"
               }
               size={size}
-              color={COLORS.star}
+              color={colors.gold}
             />
           </TouchableOpacity>
         ))}
@@ -1021,13 +1035,17 @@ export default function DishDetailScreen() {
         edges={["top", "bottom"]}
       >
         <StatusBar
-          barStyle="dark-content"
-          backgroundColor={COLORS.background}
+          barStyle={
+            isDarkMode
+              ? "light-content"
+              : "dark-content"
+          }
+          backgroundColor={colors.background}
         />
 
         <ActivityIndicator
           size="large"
-          color={COLORS.orange}
+          color={colors.orange}
         />
 
         <Text style={styles.loadingText}>
@@ -1047,8 +1065,12 @@ export default function DishDetailScreen() {
       edges={["top", "bottom"]}
     >
       <StatusBar
-        barStyle="dark-content"
-        backgroundColor={COLORS.background}
+        barStyle={
+          isDarkMode
+            ? "light-content"
+            : "dark-content"
+        }
+        backgroundColor={colors.background}
       />
 
       <KeyboardAvoidingView
@@ -1072,7 +1094,7 @@ export default function DishDetailScreen() {
             <Ionicons
               name="arrow-back"
               size={24}
-              color={COLORS.dark}
+              color={colors.foreground}
             />
           </TouchableOpacity>
 
@@ -1097,8 +1119,8 @@ export default function DishDetailScreen() {
               size={25}
               color={
                 isFavorite
-                  ? COLORS.red
-                  : COLORS.dark
+                  ? colors.destructive
+                  : colors.foreground
               }
             />
           </TouchableOpacity>
@@ -1118,7 +1140,8 @@ export default function DishDetailScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={refreshPage}
-              tintColor={COLORS.orange}
+              tintColor={colors.orange}
+              colors={[colors.orange]}
             />
           }
         >
@@ -1138,7 +1161,7 @@ export default function DishDetailScreen() {
                 <Ionicons
                   name="restaurant-outline"
                   size={65}
-                  color={COLORS.orange}
+                  color={colors.orange}
                 />
 
                 <Text
@@ -1175,8 +1198,8 @@ export default function DishDetailScreen() {
                 size={24}
                 color={
                   isFavorite
-                    ? COLORS.red
-                    : COLORS.dark
+                    ? colors.destructive
+                    : colors.foreground
                 }
               />
             </TouchableOpacity>
@@ -1214,14 +1237,12 @@ export default function DishDetailScreen() {
               {foodDescription}
             </Text>
 
-            {/* ==================================================
-                FOOD STATS
-            ================================================== */}
+            {/* FOOD STATS */}
 
             <View style={styles.statsContainer}>
               {preparationTime !== null &&
-                preparationTime !== undefined &&
-                preparationTime !== "" ? (
+              preparationTime !== undefined &&
+              preparationTime !== "" ? (
                 <View style={styles.statItem}>
                   <View
                     style={styles.statIcon}
@@ -1229,7 +1250,7 @@ export default function DishDetailScreen() {
                     <Ionicons
                       name="time-outline"
                       size={21}
-                      color={COLORS.orange}
+                      color={colors.orange}
                     />
                   </View>
 
@@ -1261,7 +1282,7 @@ export default function DishDetailScreen() {
                     <Ionicons
                       name="people-outline"
                       size={21}
-                      color={COLORS.orange}
+                      color={colors.orange}
                     />
                   </View>
 
@@ -1282,9 +1303,8 @@ export default function DishDetailScreen() {
               ) : null}
 
               {availableQuantity !== null &&
-                availableQuantity !==
-                undefined &&
-                availableQuantity !== "" ? (
+              availableQuantity !== undefined &&
+              availableQuantity !== "" ? (
                 <View style={styles.statItem}>
                   <View
                     style={styles.statIcon}
@@ -1292,7 +1312,7 @@ export default function DishDetailScreen() {
                     <Ionicons
                       name="cube-outline"
                       size={21}
-                      color={COLORS.orange}
+                      color={colors.orange}
                     />
                   </View>
 
@@ -1314,16 +1334,14 @@ export default function DishDetailScreen() {
             </View>
           </View>
 
-          {/* ====================================================
-              ERROR
-          ==================================================== */}
+          {/* ERROR */}
 
           {errorMessage ? (
             <View style={styles.errorCard}>
               <Ionicons
                 name="alert-circle-outline"
                 size={22}
-                color={COLORS.red}
+                color={colors.destructive}
               />
 
               <Text style={styles.errorText}>
@@ -1366,7 +1384,7 @@ export default function DishDetailScreen() {
                   <Ionicons
                     name="remove"
                     size={19}
-                    color={COLORS.dark}
+                    color={colors.foreground}
                   />
                 </TouchableOpacity>
 
@@ -1384,7 +1402,7 @@ export default function DishDetailScreen() {
                   <Ionicons
                     name="add"
                     size={19}
-                    color={COLORS.dark}
+                    color={colors.foreground}
                   />
                 </TouchableOpacity>
               </View>
@@ -1438,7 +1456,7 @@ export default function DishDetailScreen() {
                 }
                 placeholder="Share your experience..."
                 placeholderTextColor={
-                  COLORS.lightMuted
+                  colors.mutedForeground
                 }
                 multiline
                 textAlignVertical="top"
@@ -1458,14 +1476,14 @@ export default function DishDetailScreen() {
                 {submittingReview ? (
                   <ActivityIndicator
                     size="small"
-                    color={COLORS.white}
+                    color={colors.white}
                   />
                 ) : (
                   <>
                     <Ionicons
                       name="send-outline"
                       size={18}
-                      color={COLORS.white}
+                      color={colors.white}
                     />
 
                     <Text
@@ -1488,7 +1506,7 @@ export default function DishDetailScreen() {
               >
                 <ActivityIndicator
                   size="small"
-                  color={COLORS.orange}
+                  color={colors.orange}
                 />
 
                 <Text
@@ -1506,7 +1524,7 @@ export default function DishDetailScreen() {
                 <Ionicons
                   name="chatbubble-outline"
                   size={36}
-                  color={COLORS.lightMuted}
+                  color={colors.mutedForeground}
                 />
 
                 <Text
@@ -1569,7 +1587,7 @@ export default function DishDetailScreen() {
                             name="person"
                             size={19}
                             color={
-                              COLORS.muted
+                              colors.mutedForeground
                             }
                           />
                         </View>
@@ -1612,9 +1630,7 @@ export default function DishDetailScreen() {
             )}
           </View>
 
-          {/* ====================================================
-              DELETE - ONLY IF ENABLED
-          ==================================================== */}
+          {/* DELETE */}
 
           {SHOW_DELETE_BUTTON ? (
             <TouchableOpacity
@@ -1625,7 +1641,7 @@ export default function DishDetailScreen() {
               <Ionicons
                 name="trash-outline"
                 size={20}
-                color={COLORS.red}
+                color={colors.destructive}
               />
 
               <Text
@@ -1667,14 +1683,14 @@ export default function DishDetailScreen() {
             {addingToCart ? (
               <ActivityIndicator
                 size="small"
-                color={COLORS.white}
+                color={colors.white}
               />
             ) : (
               <>
                 <Ionicons
                   name="cart-outline"
                   size={21}
-                  color={COLORS.white}
+                  color={colors.white}
                 />
 
                 <Text
@@ -1694,546 +1710,552 @@ export default function DishDetailScreen() {
 }
 
 // ================================================================
-// STYLES
+// THEME-AWARE STYLES
 // ================================================================
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.background,
-  },
-
-  loadingText: {
-    marginTop: 12,
-    fontSize: 15,
-    color: COLORS.muted,
-  },
-
-  header: {
-    height: 62,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    backgroundColor: COLORS.background,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-
-  headerButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    marginHorizontal: 12,
-    fontSize: 18,
-    fontWeight: "700",
-    color: COLORS.dark,
-  },
-
-  scrollView: {
-    flex: 1,
-  },
-
-  scrollContent: {
-    paddingBottom: 24,
-  },
-
-  heroContainer: {
-    width: "100%",
-    height: 290,
-    position: "relative",
-    backgroundColor: COLORS.lightOrange,
-  },
-
-  heroImage: {
-    width: "100%",
-    height: "100%",
-  },
-
-  imagePlaceholder: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.lightOrange,
-  },
-
-  imagePlaceholderText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: COLORS.muted,
-    fontWeight: "500",
-  },
-
-  categoryBadge: {
-    position: "absolute",
-    left: 16,
-    bottom: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: COLORS.white,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
+const createStyles = (colors) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.background,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 4,
-  },
 
-  categoryBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.orange,
-  },
-
-  favoriteFloating: {
-    position: "absolute",
-    right: 16,
-    bottom: 16,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.white,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    elevation: 5,
-  },
 
-  infoCard: {
-    margin: 16,
-    marginBottom: 8,
-    padding: 18,
-    borderRadius: 18,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  foodName: {
-    fontSize: 25,
-    lineHeight: 31,
-    fontWeight: "800",
-    color: COLORS.dark,
-  },
-
-  ratingLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 10,
-  },
-
-  starsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  interactiveStar: {
-    paddingRight: 3,
-  },
-
-  ratingText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.dark,
-  },
-
-  reviewCount: {
-    marginLeft: 5,
-    fontSize: 13,
-    color: COLORS.muted,
-  },
-
-  description: {
-    marginTop: 15,
-    fontSize: 15,
-    lineHeight: 23,
-    color: COLORS.muted,
-  },
-
-  statsContainer: {
-    marginTop: 18,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 14,
-  },
-
-  statItem: {
-    minWidth: "43%",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  statIcon: {
-    width: 39,
-    height: 39,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 9,
-    backgroundColor: COLORS.lightOrange,
-  },
-
-  statLabel: {
-    fontSize: 11,
-    color: COLORS.muted,
-  },
-
-  statValue: {
-    marginTop: 2,
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.dark,
-  },
-
-  errorCard: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    padding: 14,
-    borderRadius: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1,
-    borderColor: "#FECACA",
-  },
-
-  errorText: {
-    flex: 1,
-    marginLeft: 9,
-    fontSize: 13,
-    lineHeight: 19,
-    color: COLORS.red,
-  },
-
-  orderCard: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    padding: 18,
-    borderRadius: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  priceLabel: {
-    marginBottom: 4,
-    fontSize: 12,
-    color: COLORS.muted,
-  },
-
-  price: {
-    fontSize: 25,
-    fontWeight: "800",
-    color: COLORS.orange,
-  },
-
-  quantityBox: {
-    height: 42,
-    minWidth: 125,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderRadius: 12,
-    backgroundColor: COLORS.lightOrange,
-    borderWidth: 1,
-    borderColor: "#FED7AA",
-  },
-
-  quantityButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  quantityText: {
-    minWidth: 30,
-    textAlign: "center",
-    fontSize: 16,
-    fontWeight: "800",
-    color: COLORS.dark,
-  },
-
-  section: {
-    marginTop: 16,
-    marginHorizontal: 16,
-  },
-
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: COLORS.dark,
-  },
-
-  sectionCount: {
-    minWidth: 25,
-    marginLeft: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    textAlign: "center",
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: COLORS.lightOrange,
-    color: COLORS.orange,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  reviewForm: {
-    padding: 17,
-    borderRadius: 17,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  formTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: COLORS.dark,
-  },
-
-  ratingQuestion: {
-    marginTop: 12,
-    marginBottom: 7,
-    fontSize: 13,
-    color: COLORS.muted,
-  },
-
-  reviewInput: {
-    minHeight: 105,
-    marginTop: 14,
-    paddingHorizontal: 13,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "#FAFAFA",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.dark,
-  },
-
-  submitReviewButton: {
-    height: 46,
-    marginTop: 12,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.orange,
-  },
-
-  submitReviewText: {
-    marginLeft: 7,
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.white,
-  },
-
-  disabledButton: {
-    opacity: 0.65,
-  },
-
-  reviewsLoading: {
-    paddingVertical: 25,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  reviewsLoadingText: {
-    marginTop: 8,
-    fontSize: 13,
-    color: COLORS.muted,
-  },
-
-  noReviews: {
-    marginTop: 12,
-    paddingVertical: 30,
-    paddingHorizontal: 20,
-    alignItems: "center",
-    borderRadius: 16,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  noReviewsTitle: {
-    marginTop: 10,
-    fontSize: 16,
-    fontWeight: "700",
-    color: COLORS.dark,
-  },
-
-  noReviewsText: {
-    marginTop: 5,
-    fontSize: 13,
-    color: COLORS.muted,
-  },
-
-  reviewCard: {
-    marginTop: 10,
-    padding: 15,
-    borderRadius: 16,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  reviewTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  reviewAvatar: {
-    width: 43,
-    height: 43,
-    borderRadius: 22,
-  },
-
-  reviewAvatarPlaceholder: {
-    width: 43,
-    height: 43,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F3F4F6",
-  },
-
-  reviewUserInfo: {
-    flex: 1,
-    marginLeft: 11,
-  },
-
-  reviewUserName: {
-    marginBottom: 4,
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.dark,
-  },
-
-  reviewComment: {
-    marginTop: 11,
-    fontSize: 14,
-    lineHeight: 21,
-    color: COLORS.muted,
-  },
-
-  deleteButton: {
-    height: 50,
-    marginHorizontal: 16,
-    marginTop: 18,
-    borderRadius: 13,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1,
-    borderColor: "#FECACA",
-  },
-
-  deleteButtonText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.red,
-  },
-
-  bottomSpace: {
-    height: 20,
-  },
-
-  bottomBar: {
-    minHeight: 78,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: -3,
+    loadingContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.background,
     },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 10,
-  },
 
-  totalLabel: {
-    fontSize: 12,
-    color: COLORS.muted,
-  },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 15,
+      color: colors.mutedForeground,
+    },
 
-  totalPrice: {
-    marginTop: 2,
-    fontSize: 22,
-    fontWeight: "800",
-    color: COLORS.dark,
-  },
+    header: {
+      height: 62,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      backgroundColor: colors.background,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
 
-  addToCartButton: {
-    minWidth: 170,
-    height: 50,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.orange,
-  },
+    headerButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
 
-  addToCartText: {
-    marginLeft: 8,
-    fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.white,
-  },
-});
+    headerTitle: {
+      flex: 1,
+      textAlign: "center",
+      marginHorizontal: 12,
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.foreground,
+    },
+
+    scrollView: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+
+    scrollContent: {
+      paddingBottom: 24,
+    },
+
+    heroContainer: {
+      width: "100%",
+      height: 290,
+      position: "relative",
+      backgroundColor: colors.muted,
+    },
+
+    heroImage: {
+      width: "100%",
+      height: "100%",
+    },
+
+    imagePlaceholder: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.muted,
+    },
+
+    imagePlaceholderText: {
+      marginTop: 8,
+      fontSize: 14,
+      color: colors.mutedForeground,
+      fontWeight: "500",
+    },
+
+    categoryBadge: {
+      position: "absolute",
+      left: 16,
+      bottom: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 20,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      shadowColor: colors.shadowColor,
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 5,
+      elevation: 4,
+    },
+
+    categoryBadgeText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.orange,
+    },
+
+    favoriteFloating: {
+      position: "absolute",
+      right: 16,
+      bottom: 16,
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      shadowColor: colors.shadowColor,
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.15,
+      shadowRadius: 5,
+      elevation: 5,
+    },
+
+    infoCard: {
+      margin: 16,
+      marginBottom: 8,
+      padding: 18,
+      borderRadius: 18,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    foodName: {
+      fontSize: 25,
+      lineHeight: 31,
+      fontWeight: "800",
+      color: colors.foreground,
+    },
+
+    ratingLine: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 10,
+    },
+
+    starsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    interactiveStar: {
+      paddingRight: 3,
+    },
+
+    ratingText: {
+      marginLeft: 8,
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.foreground,
+    },
+
+    reviewCount: {
+      marginLeft: 5,
+      fontSize: 13,
+      color: colors.mutedForeground,
+    },
+
+    description: {
+      marginTop: 15,
+      fontSize: 15,
+      lineHeight: 23,
+      color: colors.mutedForeground,
+    },
+
+    statsContainer: {
+      marginTop: 18,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 14,
+    },
+
+    statItem: {
+      minWidth: "43%",
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    statIcon: {
+      width: 39,
+      height: 39,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 9,
+      backgroundColor: colors.backgroundSelected,
+    },
+
+    statLabel: {
+      fontSize: 11,
+      color: colors.mutedForeground,
+    },
+
+    statValue: {
+      marginTop: 2,
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.foreground,
+    },
+
+    errorCard: {
+      marginHorizontal: 16,
+      marginTop: 8,
+      padding: 14,
+      borderRadius: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.destructive,
+    },
+
+    errorText: {
+      flex: 1,
+      marginLeft: 9,
+      fontSize: 13,
+      lineHeight: 19,
+      color: colors.destructive,
+    },
+
+    orderCard: {
+      marginHorizontal: 16,
+      marginTop: 8,
+      padding: 18,
+      borderRadius: 18,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    priceLabel: {
+      marginBottom: 4,
+      fontSize: 12,
+      color: colors.mutedForeground,
+    },
+
+    price: {
+      fontSize: 25,
+      fontWeight: "800",
+      color: colors.orange,
+    },
+
+    quantityBox: {
+      height: 42,
+      minWidth: 125,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      borderRadius: 12,
+      backgroundColor: colors.backgroundSelected,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    quantityButton: {
+      width: 40,
+      height: 40,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    quantityText: {
+      minWidth: 30,
+      textAlign: "center",
+      fontSize: 16,
+      fontWeight: "800",
+      color: colors.foreground,
+    },
+
+    section: {
+      marginTop: 16,
+      marginHorizontal: 16,
+    },
+
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+
+    sectionTitle: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: colors.foreground,
+    },
+
+    sectionCount: {
+      minWidth: 25,
+      marginLeft: 8,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      textAlign: "center",
+      borderRadius: 12,
+      overflow: "hidden",
+      backgroundColor: colors.backgroundSelected,
+      color: colors.orange,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+
+    reviewForm: {
+      padding: 17,
+      borderRadius: 17,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    formTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: colors.foreground,
+    },
+
+    ratingQuestion: {
+      marginTop: 12,
+      marginBottom: 7,
+      fontSize: 13,
+      color: colors.mutedForeground,
+    },
+
+    reviewInput: {
+      minHeight: 105,
+      marginTop: 14,
+      paddingHorizontal: 13,
+      paddingVertical: 12,
+      borderRadius: 12,
+      backgroundColor: colors.inputBackground,
+      borderWidth: 1,
+      borderColor: colors.border,
+      fontSize: 14,
+      lineHeight: 20,
+      color: colors.foreground,
+    },
+
+    submitReviewButton: {
+      height: 46,
+      marginTop: 12,
+      borderRadius: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.orange,
+    },
+
+    submitReviewText: {
+      marginLeft: 7,
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.white,
+    },
+
+    disabledButton: {
+      opacity: 0.65,
+    },
+
+    reviewsLoading: {
+      paddingVertical: 25,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    reviewsLoadingText: {
+      marginTop: 8,
+      fontSize: 13,
+      color: colors.mutedForeground,
+    },
+
+    noReviews: {
+      marginTop: 12,
+      paddingVertical: 30,
+      paddingHorizontal: 20,
+      alignItems: "center",
+      borderRadius: 16,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    noReviewsTitle: {
+      marginTop: 10,
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.foreground,
+    },
+
+    noReviewsText: {
+      marginTop: 5,
+      fontSize: 13,
+      color: colors.mutedForeground,
+    },
+
+    reviewCard: {
+      marginTop: 10,
+      padding: 15,
+      borderRadius: 16,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    reviewTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    reviewAvatar: {
+      width: 43,
+      height: 43,
+      borderRadius: 22,
+    },
+
+    reviewAvatarPlaceholder: {
+      width: 43,
+      height: 43,
+      borderRadius: 22,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.muted,
+    },
+
+    reviewUserInfo: {
+      flex: 1,
+      marginLeft: 11,
+    },
+
+    reviewUserName: {
+      marginBottom: 4,
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.foreground,
+    },
+
+    reviewComment: {
+      marginTop: 11,
+      fontSize: 14,
+      lineHeight: 21,
+      color: colors.mutedForeground,
+    },
+
+    deleteButton: {
+      height: 50,
+      marginHorizontal: 16,
+      marginTop: 18,
+      borderRadius: 13,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.destructive,
+    },
+
+    deleteButtonText: {
+      marginLeft: 8,
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.destructive,
+    },
+
+    bottomSpace: {
+      height: 20,
+    },
+
+    bottomBar: {
+      minHeight: 78,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: colors.card,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      shadowColor: colors.shadowColor,
+      shadowOffset: {
+        width: 0,
+        height: -3,
+      },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 10,
+    },
+
+    totalLabel: {
+      fontSize: 12,
+      color: colors.mutedForeground,
+    },
+
+    totalPrice: {
+      marginTop: 2,
+      fontSize: 22,
+      fontWeight: "800",
+      color: colors.foreground,
+    },
+
+    addToCartButton: {
+      minWidth: 170,
+      height: 50,
+      paddingHorizontal: 20,
+      borderRadius: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.orange,
+    },
+
+    addToCartText: {
+      marginLeft: 8,
+      fontSize: 15,
+      fontWeight: "800",
+      color: colors.white,
+    },
+  });

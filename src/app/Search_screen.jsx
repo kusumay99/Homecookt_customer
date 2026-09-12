@@ -11,13 +11,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useColorScheme,
-  View,
+  View
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
+import { useApp } from "./_layout";
 
 const BASE_URL = "https://api.homecookt.com";
 
@@ -26,8 +26,7 @@ const BASE_URL = "https://api.homecookt.com";
 // ============================================================
 
 const SearchScreen = () => {
-  const systemScheme = useColorScheme();
-  const isDark = systemScheme === "dark";
+  const { isDarkMode, colors } = useApp();
 
   // ============================================================
   // STATE
@@ -57,28 +56,6 @@ const SearchScreen = () => {
 
   const searchRequestIdRef = useRef(0);
   const suggestionRequestIdRef = useRef(0);
-
-  // ============================================================
-  // COLORS
-  // ============================================================
-
-  const colors = {
-    background: isDark ? "#121212" : "#F7F8FA",
-    card: isDark ? "#1E1E1E" : "#FFFFFF",
-    input: isDark ? "#202020" : "#FFFFFF",
-    border: isDark ? "#333333" : "#E6E6E6",
-
-    text: isDark ? "#FFFFFF" : "#111111",
-    secondaryText: isDark ? "#BDBDBD" : "#666666",
-    muted: isDark ? "#8D8D8D" : "#888888",
-
-    orange: "#F28C28",
-    gold: "#F5B83D",
-
-    iconBackground: isDark
-      ? "#242424"
-      : "#EEEEF0",
-  };
 
   // ============================================================
   // GET TOKEN
@@ -1124,7 +1101,7 @@ const SearchScreen = () => {
     >
       <StatusBar
         barStyle={
-          isDark
+          isDarkMode
             ? "light-content"
             : "dark-content"
         }

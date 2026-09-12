@@ -11,32 +11,12 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ============================================================
-// COLORS
-// ============================================================
-
-const AppColors = {
-  orange: "#F97316",
-  gold: "#F59E0B",
-
-  background: "#FFF8F3",
-  card: "#FFFFFF",
-  foreground: "#1F2937",
-  mutedForeground: "#6B7280",
-
-  darkBackground: "#111827",
-  darkCard: "#1F2937",
-  darkForeground: "#F9FAFB",
-  darkMuted: "#D1D5DB",
-
-  border: "#E5E7EB",
-};
+import { useApp } from "./_layout";
 
 // ============================================================
 // SUPPORT DETAILS
@@ -52,29 +32,13 @@ const WHATSAPP_PHONE = "447462365503";
 
 const HelpSupportScreen = () => {
   const router = useRouter();
-  const systemColorScheme = useColorScheme();
-
-  const isDark = systemColorScheme === "dark";
 
   // ==========================================================
-  // THEME COLORS
+  // GLOBAL THEME
   // ==========================================================
 
-  const backgroundColor = isDark
-    ? AppColors.darkBackground
-    : AppColors.background;
+  const { isDarkMode, colors } = useApp();
 
-  const cardColor = isDark
-    ? AppColors.darkCard
-    : AppColors.card;
-
-  const foregroundColor = isDark
-    ? AppColors.darkForeground
-    : AppColors.foreground;
-
-  const mutedColor = isDark
-    ? AppColors.darkMuted
-    : AppColors.mutedForeground;
 
   // ==========================================================
   // GO BACK
@@ -201,18 +165,18 @@ const HelpSupportScreen = () => {
       style={[
         styles.safeArea,
         {
-          backgroundColor,
+          backgroundColor: colors.background,
         },
       ]}
       edges={["top", "left", "right", "bottom"]}
     >
       <StatusBar
         barStyle={
-          isDark
+          isDarkMode
             ? "light-content"
             : "dark-content"
         }
-        backgroundColor={backgroundColor}
+        backgroundColor={colors.background}
       />
 
       {/* ====================================================
@@ -223,7 +187,7 @@ const HelpSupportScreen = () => {
         style={[
           styles.header,
           {
-            backgroundColor,
+            backgroundColor: colors.background,
           },
         ]}
       >
@@ -237,7 +201,7 @@ const HelpSupportScreen = () => {
           <Ionicons
             name="arrow-back"
             size={24}
-            color={foregroundColor}
+            color={colors.foreground}
           />
         </TouchableOpacity>
 
@@ -245,7 +209,7 @@ const HelpSupportScreen = () => {
           style={[
             styles.headerTitle,
             {
-              color: foregroundColor,
+              color: colors.foreground,
             },
           ]}
         >
@@ -263,7 +227,7 @@ const HelpSupportScreen = () => {
         style={[
           styles.scrollView,
           {
-            backgroundColor,
+            backgroundColor: colors.background,
           },
         ]}
         contentContainerStyle={styles.contentContainer}
@@ -276,8 +240,8 @@ const HelpSupportScreen = () => {
 
         <LinearGradient
           colors={[
-            AppColors.orange,
-            AppColors.gold,
+            colors.orange,
+            colors.gold,
           ]}
           start={{
             x: 0,
@@ -315,7 +279,7 @@ const HelpSupportScreen = () => {
           style={[
             styles.sectionTitle,
             {
-              color: foregroundColor,
+              color: colors.foreground,
             },
           ]}
         >
@@ -325,7 +289,8 @@ const HelpSupportScreen = () => {
         {/* CALL */}
 
         <SupportTile
-          isDark={isDark}
+          isDark={isDarkMode}
+          colors={colors}
           icon="call-outline"
           title="Call Support"
           subtitle={SUPPORT_PHONE}
@@ -335,7 +300,8 @@ const HelpSupportScreen = () => {
         {/* EMAIL */}
 
         <SupportTile
-          isDark={isDark}
+          isDark={isDarkMode}
+          colors={colors}
           icon="mail-outline"
           title="Email Support"
           subtitle={SUPPORT_EMAIL}
@@ -345,7 +311,8 @@ const HelpSupportScreen = () => {
         {/* WHATSAPP */}
 
         <SupportTile
-          isDark={isDark}
+          isDark={isDarkMode}
+          colors={colors}
           icon="logo-whatsapp"
           title="Live Chat"
           subtitle="Chat with our team on WhatsApp"
@@ -360,7 +327,7 @@ const HelpSupportScreen = () => {
           style={[
             styles.sectionTitle,
             {
-              color: foregroundColor,
+              color: colors.foreground,
             },
           ]}
         >
@@ -368,31 +335,36 @@ const HelpSupportScreen = () => {
         </Text>
 
         <FaqTile
-          isDark={isDark}
+          isDark={isDarkMode}
+          colors={colors}
           question="How can I place an order?"
           answer="Browse available dishes, select the food you want, add it to your cart, and proceed to checkout."
         />
 
         <FaqTile
-          isDark={isDark}
+          isDark={isDarkMode}
+          colors={colors}
           question="How can I create a kitchen?"
           answer="If your account supports kitchen-owner features, open the My Kitchen section and select Create Kitchen."
         />
 
         <FaqTile
-          isDark={isDark}
+          isDark={isDarkMode}
+          colors={colors}
           question="How do I track my order?"
           answer="Open Order History from your profile and select the order you want to track."
         />
 
         <FaqTile
-          isDark={isDark}
+          isDark={isDarkMode}
+          colors={colors}
           question="How can I update my profile?"
           answer="Open your Profile, select Update Profile, make the required changes, and save them."
         />
 
         <FaqTile
-          isDark={isDark}
+          isDark={isDarkMode}
+          colors={colors}
           question="What should I do if my order has a problem?"
           answer="Please contact HomeCookt Support by phone, email, or WhatsApp and provide your order details."
         />
@@ -405,7 +377,7 @@ const HelpSupportScreen = () => {
           style={[
             styles.supportCard,
             {
-              backgroundColor: cardColor,
+              backgroundColor: colors.card,
             },
           ]}
         >
@@ -413,7 +385,7 @@ const HelpSupportScreen = () => {
             style={[
               styles.supportIconContainer,
               {
-                backgroundColor: isDark
+                backgroundColor: isDarkMode
                   ? "rgba(249,115,22,0.15)"
                   : "rgba(249,115,22,0.10)",
               },
@@ -422,7 +394,7 @@ const HelpSupportScreen = () => {
             <Ionicons
               name="headset-outline"
               size={40}
-              color={AppColors.orange}
+              color={colors.orange}
             />
           </View>
 
@@ -430,7 +402,7 @@ const HelpSupportScreen = () => {
             style={[
               styles.supportTitle,
               {
-                color: foregroundColor,
+                color: colors.foreground,
               },
             ]}
           >
@@ -441,7 +413,7 @@ const HelpSupportScreen = () => {
             style={[
               styles.supportDescription,
               {
-                color: mutedColor,
+                color: colors.mutedForeground,
               },
             ]}
           >
@@ -452,7 +424,7 @@ const HelpSupportScreen = () => {
             style={[
               styles.supportContact,
               {
-                color: mutedColor,
+                color: colors.mutedForeground,
               },
             ]}
           >
@@ -472,23 +444,12 @@ const HelpSupportScreen = () => {
 
 const SupportTile = ({
   isDark,
+  colors,
   icon,
   title,
   subtitle,
   onPress,
 }) => {
-  const cardColor = isDark
-    ? AppColors.darkCard
-    : AppColors.card;
-
-  const foregroundColor = isDark
-    ? AppColors.darkForeground
-    : AppColors.foreground;
-
-  const arrowColor = isDark
-    ? "#9CA3AF"
-    : "#6B7280";
-
   return (
     <TouchableOpacity
       activeOpacity={0.75}
@@ -496,7 +457,7 @@ const SupportTile = ({
       style={[
         styles.supportTile,
         {
-          backgroundColor: cardColor,
+          backgroundColor: colors.card,
         },
       ]}
       accessibilityRole="button"
@@ -517,7 +478,7 @@ const SupportTile = ({
         <Ionicons
           name={icon}
           size={24}
-          color={AppColors.orange}
+          color={colors.orange}
         />
       </View>
 
@@ -528,7 +489,7 @@ const SupportTile = ({
           style={[
             styles.tileTitle,
             {
-              color: foregroundColor,
+              color: colors.foreground,
             },
           ]}
         >
@@ -539,9 +500,7 @@ const SupportTile = ({
           style={[
             styles.tileSubtitle,
             {
-              color: isDark
-                ? AppColors.darkMuted
-                : AppColors.mutedForeground,
+              color: colors.mutedForeground,
             },
           ]}
           numberOfLines={2}
@@ -555,7 +514,7 @@ const SupportTile = ({
       <Ionicons
         name="chevron-forward-outline"
         size={20}
-        color={arrowColor}
+        color={colors.mutedForeground}
       />
     </TouchableOpacity>
   );
@@ -567,30 +526,19 @@ const SupportTile = ({
 
 const FaqTile = ({
   isDark,
+  colors,
   question,
   answer,
 }) => {
   const [expanded, setExpanded] =
     useState(false);
 
-  const cardColor = isDark
-    ? AppColors.darkCard
-    : AppColors.card;
-
-  const foregroundColor = isDark
-    ? AppColors.darkForeground
-    : AppColors.foreground;
-
-  const iconColor = isDark
-    ? "#D1D5DB"
-    : "#6B7280";
-
   return (
     <View
       style={[
         styles.faqCard,
         {
-          backgroundColor: cardColor,
+          backgroundColor: colors.card,
         },
       ]}
     >
@@ -612,7 +560,7 @@ const FaqTile = ({
           style={[
             styles.faqQuestion,
             {
-              color: foregroundColor,
+              color: colors.foreground,
             },
           ]}
         >
@@ -626,23 +574,19 @@ const FaqTile = ({
               : "chevron-down-outline"
           }
           size={21}
-          color={iconColor}
+          color={colors.mutedForeground}
         />
       </TouchableOpacity>
 
       {expanded && (
         <View
-          style={
-            styles.faqAnswerContainer
-          }
+          style={styles.faqAnswerContainer}
         >
           <Text
             style={[
               styles.faqAnswer,
               {
-                color: isDark
-                  ? AppColors.darkMuted
-                  : AppColors.mutedForeground,
+                color: colors.mutedForeground,
               },
             ]}
           >
@@ -771,11 +715,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
 
-    shadowColor: "#000",
+    shadowColor: "#000000",
+
     shadowOffset: {
       width: 0,
       height: 2,
     },
+
     shadowOpacity: 0.04,
     shadowRadius: 4,
 
@@ -820,11 +766,13 @@ const styles = StyleSheet.create({
 
     overflow: "hidden",
 
-    shadowColor: "#000",
+    shadowColor: "#000000",
+
     shadowOffset: {
       width: 0,
       height: 1,
     },
+
     shadowOpacity: 0.03,
     shadowRadius: 3,
 
@@ -872,11 +820,13 @@ const styles = StyleSheet.create({
 
     alignItems: "center",
 
-    shadowColor: "#000",
+    shadowColor: "#000000",
+
     shadowOffset: {
       width: 0,
       height: 2,
     },
+
     shadowOpacity: 0.04,
     shadowRadius: 5,
 
