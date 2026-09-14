@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/images/home-cookt-logo.png",
-      "bundleIdentifier": "y",
+      "bundleIdentifier": "Com.homecookt.HomeCookt",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
