@@ -20,7 +20,7 @@
         "foregroundImage": "./assets/images/home-cookt-logo.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.homecookt.HomeCookt"
+      "package": "Com.homecookt.HomeCookt"
     },
     "web": {
       "output": "static",
