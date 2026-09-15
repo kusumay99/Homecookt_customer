@@ -14,7 +14,7 @@ workflows:
 
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: Com.homecookt.HomeCookt
+        bundle_identifier: com.homecookt.homeCookt
 
     scripts:
 
