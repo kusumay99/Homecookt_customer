@@ -1,12 +1,14 @@
 import {
   useCallback,
   useEffect,
-  useState
+  useState,
 } from "react";
 
 import {
   ActivityIndicator,
+  Alert,
   Image,
+  Keyboard,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -14,38 +16,32 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ============================================================
-// GLOBAL APP THEME
-// ============================================================
-
 import { useApp } from "./_layout";
 
 // ============================================================
-// BASE URL
+// API
 // ============================================================
 
 const BASE_URL = "https://api.homecookt.com";
 
 // ============================================================
-// NEARBY SEARCH RADIUS
-// ============================================================
-//
-// Change this to 5, 10, 15, etc.
-//
-// 15 = 15 kilometers
-//
+// SETTINGS
 // ============================================================
 
 const NEARBY_RADIUS_KM = 15;
+
+const SELECTED_LOCATION_KEY =
+  "homecookt_selected_location";
 
 // ============================================================
 // COLORS
@@ -61,15 +57,91 @@ const COLORS = {
   white: "#FFFFFF",
 
   muted: "#777777",
-
   border: "#EEEEEE",
 
   lightOrange: "#FFF1E7",
 
   green: "#16A34A",
-
   red: "#EF4444",
+
+  darkCard: "#1A1816",
+  darkBorder: "#302C29",
+  darkMuted: "#A7A19C",
 };
+
+// ============================================================
+// SAFE NUMBER
+// ============================================================
+
+function toNumber(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : null;
+}
+
+// ============================================================
+// HAVERSINE DISTANCE
+// ============================================================
+
+function calculateDistanceKm(
+  latitude1,
+  longitude1,
+  latitude2,
+  longitude2
+) {
+  const lat1 = toNumber(latitude1);
+  const lon1 = toNumber(longitude1);
+  const lat2 = toNumber(latitude2);
+  const lon2 = toNumber(longitude2);
+
+  if (
+    lat1 === null ||
+    lon1 === null ||
+    lat2 === null ||
+    lon2 === null
+  ) {
+    return null;
+  }
+
+  const earthRadiusKm = 6371;
+
+  const dLat =
+    ((lat2 - lat1) * Math.PI) / 180;
+
+  const dLon =
+    ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) *
+      Math.sin(dLat / 2) +
+    Math.cos(
+      (lat1 * Math.PI) / 180
+    ) *
+      Math.cos(
+        (lat2 * Math.PI) / 180
+      ) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+  const c =
+    2 *
+    Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1 - a)
+    );
+
+  return earthRadiusKm * c;
+}
 
 // ============================================================
 // HOME SCREEN
@@ -77,7 +149,7 @@ const COLORS = {
 
 export default function HomeScreen() {
   // ==========================================================
-  // GLOBAL THEME
+  // THEME
   // ==========================================================
 
   const {
@@ -86,17 +158,11 @@ export default function HomeScreen() {
   } = useApp();
 
   // ==========================================================
-  // STATE
+  // DATA STATE
   // ==========================================================
 
-  const [isLoading, setIsLoading] =
-    useState(true);
-
-  const [refreshing, setRefreshing] =
-    useState(false);
-
-  const [allFoods, setAllFoods] =
-    useState([]);
+  const [user, setUser] =
+    useState(null);
 
   const [topRatedFoods, setTopRatedFoods] =
     useState([]);
@@ -107,22 +173,34 @@ export default function HomeScreen() {
   const [unreadCount, setUnreadCount] =
     useState(0);
 
-  const [user, setUser] =
-    useState(null);
+  // ==========================================================
+  // LOADING
+  // ==========================================================
+
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
 
   // ==========================================================
-  // LOCATION STATE
+  // LOCATION
   // ==========================================================
 
   const [
-    currentLocation,
-    setCurrentLocation,
+    selectedLocation,
+    setSelectedLocation,
   ] = useState(null);
+
+  const [
+    locationText,
+    setLocationText,
+  ] = useState("");
 
   const [
     locationLoading,
     setLocationLoading,
-  ] = useState(true);
+  ] = useState(false);
 
   const [
     locationError,
@@ -140,7 +218,7 @@ export default function HomeScreen() {
 
   const cardColor =
     isDarkMode
-      ? "#1A1816"
+      ? COLORS.darkCard
       : COLORS.white;
 
   const textColor =
@@ -150,16 +228,21 @@ export default function HomeScreen() {
 
   const mutedColor =
     isDarkMode
-      ? "#AAAAAA"
+      ? COLORS.darkMuted
       : COLORS.muted;
 
   const borderColor =
     isDarkMode
-      ? "#33302D"
+      ? COLORS.darkBorder
       : COLORS.border;
 
+  const softColor =
+    isDarkMode
+      ? "#241F1B"
+      : COLORS.lightOrange;
+
   // ==========================================================
-  // TOKEN
+  // GET TOKEN
   // ==========================================================
 
   const getToken =
@@ -172,97 +255,27 @@ export default function HomeScreen() {
         ];
 
         for (const key of keys) {
-          const token =
+          const value =
             await AsyncStorage.getItem(
               key
             );
 
           if (
-            token &&
-            token.trim()
+            value &&
+            value.trim()
           ) {
-            return token.trim();
+            return value.trim();
           }
         }
-
-        console.log(
-          "HOME TOKEN: Access token not found"
-        );
 
         return null;
       } catch (error) {
         console.log(
-          "TOKEN ERROR:",
+          "GET TOKEN ERROR:",
           error
         );
 
         return null;
-      }
-    }, []);
-
-  // ==========================================================
-  // USER
-  // ==========================================================
-
-  const loadUser =
-    useCallback(async () => {
-      try {
-        const storedUser =
-          await AsyncStorage.getItem(
-            "user"
-          );
-
-        if (storedUser) {
-          try {
-            const parsedUser =
-              JSON.parse(
-                storedUser
-              );
-
-            if (
-              parsedUser &&
-              typeof parsedUser ===
-                "object"
-            ) {
-              setUser(
-                parsedUser
-              );
-
-              return;
-            }
-          } catch (error) {
-            console.log(
-              "USER PARSE ERROR:",
-              error
-            );
-          }
-        }
-
-        const name =
-          await AsyncStorage.getItem(
-            "name"
-          );
-
-        const image =
-          await AsyncStorage.getItem(
-            "image"
-          );
-
-        const email =
-          await AsyncStorage.getItem(
-            "email"
-          );
-
-        setUser({
-          name: name || "",
-          image: image || "",
-          email: email || "",
-        });
-      } catch (error) {
-        console.log(
-          "LOAD USER ERROR:",
-          error
-        );
       }
     }, []);
 
@@ -275,81 +288,107 @@ export default function HomeScreen() {
       const token =
         await getToken();
 
-      return {
-        Accept:
-          "application/json",
-
+      const headers = {
+        Accept: "application/json",
         "Content-Type":
           "application/json",
-
-        ...(token
-          ? {
-              Authorization:
-                `Bearer ${token}`,
-            }
-          : {}),
       };
+
+      if (token) {
+        headers.Authorization =
+          `Bearer ${token}`;
+      }
+
+      return headers;
     }, [getToken]);
 
   // ==========================================================
-  // JSON RESPONSE
+  // PARSE JSON RESPONSE
   // ==========================================================
 
   const parseJsonResponse =
-    useCallback(
-      async (response) => {
-        const text =
-          await response.text();
+    useCallback(async (response) => {
+      const text =
+        await response.text();
 
-        if (!text) {
-          return {};
+      if (!text) {
+        return {};
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        console.log(
+          "INVALID JSON RESPONSE:",
+          text.substring(0, 500)
+        );
+
+        return {};
+      }
+    }, []);
+
+  // ==========================================================
+  // EXTRACT FOOD ARRAY
+  // ==========================================================
+
+  const extractFoods =
+    useCallback((data) => {
+      if (Array.isArray(data)) {
+        return data;
+      }
+
+      const possibleArrays = [
+        data?.foods,
+        data?.food_items,
+        data?.foodItems,
+        data?.items,
+        data?.results,
+        data?.recommendations,
+        data?.data,
+        data?.data?.foods,
+        data?.data?.food_items,
+        data?.data?.foodItems,
+        data?.data?.items,
+        data?.data?.results,
+        data?.data?.recommendations,
+      ];
+
+      for (
+        const value of possibleArrays
+      ) {
+        if (Array.isArray(value)) {
+          return value;
         }
+      }
 
-        try {
-          return JSON.parse(
-            text
-          );
-        } catch (error) {
-          console.log(
-            "JSON PARSE ERROR:",
-            text
-          );
-
-          return {};
-        }
-      },
-      []
-    );
+      return [];
+    }, []);
 
   // ==========================================================
   // IMAGE VALIDATION
   // ==========================================================
 
   const isValidImage =
-    useCallback(
-      (value) => {
-        if (
-          !value ||
-          typeof value !==
-            "string"
-        ) {
-          return false;
-        }
+    useCallback((value) => {
+      if (
+        !value ||
+        typeof value !== "string"
+      ) {
+        return false;
+      }
 
-        const trimmed =
-          value.trim();
+      const valueLower =
+        value.trim().toLowerCase();
 
-        return (
-          trimmed.startsWith(
-            "http://"
-          ) ||
-          trimmed.startsWith(
-            "https://"
-          )
-        );
-      },
-      []
-    );
+      return (
+        valueLower.startsWith(
+          "http://"
+        ) ||
+        valueLower.startsWith(
+          "https://"
+        )
+      );
+    }, []);
 
   // ==========================================================
   // FOOD IMAGE
@@ -362,42 +401,49 @@ export default function HomeScreen() {
           return null;
         }
 
-        const images = [
+        const candidates = [
           food.image,
           food.image_url,
-          food.food_image,
           food.imageUrl,
           food.photo,
           food.photo_url,
+          food.food_image,
+          food.food_image_url,
           food.thumbnail,
-          food.food_photo,
+          food.thumbnail_url,
+
+          food.images?.[0],
+          food.photos?.[0],
+          food.image_urls?.[0],
+          food.food_images?.[0],
         ];
 
-        if (
-          Array.isArray(
-            food.images
-          )
+        for (
+          const candidate of candidates
         ) {
-          images.push(
-            ...food.images
-          );
-        }
-
-        if (
-          Array.isArray(
-            food.image_urls
-          )
-        ) {
-          images.push(
-            ...food.image_urls
-          );
-        }
-
-        for (const image of images) {
           if (
-            isValidImage(image)
+            typeof candidate ===
+              "object" &&
+            candidate !== null
           ) {
-            return image.trim();
+            const nested =
+              candidate.url ||
+              candidate.uri ||
+              candidate.image_url;
+
+            if (
+              isValidImage(
+                nested
+              )
+            ) {
+              return nested.trim();
+            }
+          }
+
+          if (
+            isValidImage(candidate)
+          ) {
+            return candidate.trim();
           }
         }
 
@@ -407,841 +453,422 @@ export default function HomeScreen() {
     );
 
   // ==========================================================
+  // FIND LATITUDE
+  // ==========================================================
+
+  const getLatitude =
+    useCallback((food) => {
+      if (!food) {
+        return null;
+      }
+
+      const candidates = [
+        // Food
+        food.latitude,
+        food.lat,
+
+        // Kitchen
+        food.kitchen?.latitude,
+        food.kitchen?.lat,
+
+        // Kitchen details
+        food.kitchen_details?.latitude,
+        food.kitchen_details?.lat,
+
+        // Kitchen location
+        food.kitchen_location?.latitude,
+        food.kitchen_location?.lat,
+
+        // Generic location
+        food.location?.latitude,
+        food.location?.lat,
+
+        // Coordinates
+        food.coordinates?.latitude,
+        food.coordinates?.lat,
+
+        // GeoJSON coordinates:
+        // [longitude, latitude]
+        food.coordinates?.[1],
+
+        // Kitchen nested location
+        food.kitchen?.location?.latitude,
+        food.kitchen?.location?.lat,
+
+        // Kitchen coordinates
+        food.kitchen?.coordinates?.latitude,
+        food.kitchen?.coordinates?.lat,
+        food.kitchen?.coordinates?.[1],
+
+        // Common backend naming
+        food.kitchen_latitude,
+        food.kitchen_lat,
+
+        food.location_latitude,
+        food.location_lat,
+
+        food.lat_coordinate,
+      ];
+
+      for (
+        const value of candidates
+      ) {
+        const number =
+          toNumber(value);
+
+        if (
+          number !== null &&
+          number >= -90 &&
+          number <= 90
+        ) {
+          return number;
+        }
+      }
+
+      return null;
+    }, []);
+
+  // ==========================================================
+  // FIND LONGITUDE
+  // ==========================================================
+
+  const getLongitude =
+    useCallback((food) => {
+      if (!food) {
+        return null;
+      }
+
+      const candidates = [
+        // Food
+        food.longitude,
+        food.lng,
+        food.lon,
+
+        // Kitchen
+        food.kitchen?.longitude,
+        food.kitchen?.lng,
+        food.kitchen?.lon,
+
+        // Kitchen details
+        food.kitchen_details?.longitude,
+        food.kitchen_details?.lng,
+
+        // Kitchen location
+        food.kitchen_location?.longitude,
+        food.kitchen_location?.lng,
+
+        // Generic location
+        food.location?.longitude,
+        food.location?.lng,
+
+        // Coordinates
+        food.coordinates?.longitude,
+        food.coordinates?.lng,
+
+        // GeoJSON coordinates:
+        // [longitude, latitude]
+        food.coordinates?.[0],
+
+        // Kitchen nested location
+        food.kitchen?.location?.longitude,
+        food.kitchen?.location?.lng,
+
+        // Kitchen coordinates
+        food.kitchen?.coordinates?.longitude,
+        food.kitchen?.coordinates?.lng,
+        food.kitchen?.coordinates?.[0],
+
+        // Common backend naming
+        food.kitchen_longitude,
+        food.kitchen_lng,
+
+        food.location_longitude,
+        food.location_lng,
+
+        food.lng_coordinate,
+      ];
+
+      for (
+        const value of candidates
+      ) {
+        const number =
+          toNumber(value);
+
+        if (
+          number !== null &&
+          number >= -180 &&
+          number <= 180
+        ) {
+          return number;
+        }
+      }
+
+      return null;
+    }, []);
+
+  // ==========================================================
   // NORMALIZE FOOD
   // ==========================================================
 
   const normalizeFood =
     useCallback(
-      (item) => {
+      (food) => {
         if (
-          !item ||
-          typeof item !==
+          !food ||
+          typeof food !==
             "object"
         ) {
           return null;
         }
 
-        const foodId =
-          item.id ??
-          item.food_id ??
-          item.foodId ??
-          item._id ??
-          null;
-
-        const foodName =
-          item.name ??
-          item.food_name ??
-          item.foodName ??
-          "Food";
-
-        const foodDescription =
-          item.description ??
-          item.food_description ??
-          "";
-
-        const foodPrice =
-          item.price ??
-          item.food_price ??
-          0;
-
-        const foodRating =
-          item.rating ??
-          item.average_rating ??
-          item.avg_rating ??
-          0;
-
-        return {
-          ...item,
-
-          id: foodId,
-
-          food_id:
-            item.food_id ??
-            item.id ??
-            item.foodId ??
-            item._id ??
-            null,
-
-          name: foodName,
-
-          food_name:
-            item.food_name ??
-            item.name ??
-            item.foodName ??
-            "Food",
-
-          description:
-            foodDescription,
-
-          price:
-            foodPrice,
-
-          rating:
-            foodRating,
-
-          image:
-            getFoodImage(item),
-        };
-      },
-      [getFoodImage]
-    );
-
-  // ==========================================================
-  // EXTRACT FOODS
-  // ==========================================================
-
-  const extractFoods =
-    useCallback(
-      (data) => {
-        if (
-          Array.isArray(data)
-        ) {
-          return data;
-        }
+        const id =
+          food.id ??
+          food.food_id ??
+          food.foodId ??
+          food._id;
 
         if (
-          Array.isArray(
-            data?.fooditems
-          )
+          id === undefined ||
+          id === null ||
+          id === ""
         ) {
-          return data.fooditems;
-        }
-
-        if (
-          Array.isArray(
-            data?.foods
-          )
-        ) {
-          return data.foods;
-        }
-
-        if (
-          Array.isArray(
-            data?.items
-          )
-        ) {
-          return data.items;
-        }
-
-        if (
-          Array.isArray(
-            data?.data
-          )
-        ) {
-          return data.data;
-        }
-
-        if (
-          Array.isArray(
-            data?.recommendations
-          )
-        ) {
-          return data.recommendations;
-        }
-
-        return [];
-      },
-      []
-    );
-
-  // ==========================================================
-  // GET CURRENT LOCATION
-  // ==========================================================
-
-  const getCurrentLocation =
-    useCallback(async () => {
-      try {
-        setLocationLoading(
-          true
-        );
-
-        setLocationError("");
-
-        console.log(
-          "GETTING CURRENT LOCATION..."
-        );
-
-        const servicesEnabled =
-          await Location.hasServicesEnabledAsync();
-
-        if (!servicesEnabled) {
-          console.log(
-            "LOCATION SERVICES DISABLED"
-          );
-
-          setLocationError(
-            "Please enable location services."
-          );
-
-          setCurrentLocation(
-            null
-          );
-
           return null;
         }
-
-        let permission =
-          await Location.getForegroundPermissionsAsync();
-
-        if (
-          permission.status !==
-          "granted"
-        ) {
-          permission =
-            await Location.requestForegroundPermissionsAsync();
-        }
-
-        if (
-          permission.status !==
-          "granted"
-        ) {
-          console.log(
-            "LOCATION PERMISSION DENIED"
-          );
-
-          setLocationError(
-            "Location permission is required to show nearby food."
-          );
-
-          setCurrentLocation(
-            null
-          );
-
-          return null;
-        }
-
-        const location =
-          await Location.getCurrentPositionAsync(
-            {
-              accuracy:
-                Location.Accuracy.High,
-            }
-          );
 
         const latitude =
-          location.coords.latitude;
+          getLatitude(food);
 
         const longitude =
-          location.coords.longitude;
+          getLongitude(food);
 
-        console.log(
-          "CURRENT LATITUDE =>",
-          latitude
-        );
+        const rating =
+          toNumber(
+            food.rating ??
+              food.average_rating ??
+              food.avg_rating ??
+              food.food_rating ??
+              food.averageRating
+          ) ?? 0;
 
-        console.log(
-          "CURRENT LONGITUDE =>",
-          longitude
-        );
+        return {
+          ...food,
 
-        const locationData = {
+          id,
+
           latitude,
           longitude,
+
+          name:
+            food.name ??
+            food.food_name ??
+            food.foodName ??
+            "Food",
+
+          price:
+            food.price ??
+            food.food_price ??
+            food.foodPrice ??
+            0,
+
+          rating,
+
+          description:
+            food.description ??
+            food.food_description ??
+            "Homemade with love",
         };
-
-        setCurrentLocation(
-          locationData
-        );
-
-        return locationData;
-      } catch (error) {
-        console.log(
-          "CURRENT LOCATION ERROR =>",
-          error
-        );
-
-        setLocationError(
-          "Unable to get your current location."
-        );
-
-        setCurrentLocation(
-          null
-        );
-
-        return null;
-      } finally {
-        setLocationLoading(
-          false
-        );
-      }
-    }, []);
-
-  // ==========================================================
-  // CONVERT COORDINATE TO NUMBER
-  // ==========================================================
-
-  const toNumber =
-    useCallback((value) => {
-      if (
-        value === null ||
-        value === undefined ||
-        value === ""
-      ) {
-        return null;
-      }
-
-      const number =
-        Number(value);
-
-      return Number.isFinite(
-        number
-      )
-        ? number
-        : null;
-    }, []);
-
-  // ==========================================================
-  // GET LATITUDE FROM FOOD / KITCHEN
-  // ==========================================================
-
-  const getLatitude =
-    useCallback(
-      (food) => {
-        if (!food) {
-          return null;
-        }
-
-        const candidates = [
-          food.latitude,
-          food.lat,
-
-          food.kitchen_latitude,
-          food.kitchen_lat,
-
-          food.kitchen?.latitude,
-          food.kitchen?.lat,
-
-          food.kitchen_data
-            ?.latitude,
-
-          food.kitchenData
-            ?.latitude,
-
-          food.location
-            ?.latitude,
-
-          food.coordinates
-            ?.latitude,
-
-          food.coordinates
-            ?.lat,
-
-          food.kitchen
-            ?.location
-            ?.latitude,
-
-          food.kitchen
-            ?.location
-            ?.lat,
-
-          food.kitchen
-            ?.coordinates
-            ?.latitude,
-
-          food.kitchen
-            ?.coordinates
-            ?.lat,
-        ];
-
-        for (
-          const value of candidates
-        ) {
-          const number =
-            toNumber(value);
-
-          if (
-            number !== null &&
-            number >= -90 &&
-            number <= 90
-          ) {
-            return number;
-          }
-        }
-
-        return null;
       },
-      [toNumber]
+      [
+        getLatitude,
+        getLongitude,
+      ]
     );
 
   // ==========================================================
-  // GET LONGITUDE FROM FOOD / KITCHEN
+  // FILTER ALL FOODS WITHIN 15 KM
   // ==========================================================
 
-  const getLongitude =
-    useCallback(
-      (food) => {
-        if (!food) {
-          return null;
-        }
-
-        const candidates = [
-          food.longitude,
-          food.lng,
-          food.lon,
-
-          food.kitchen_longitude,
-          food.kitchen_lng,
-          food.kitchen_lon,
-
-          food.kitchen?.longitude,
-          food.kitchen?.lng,
-          food.kitchen?.lon,
-
-          food.kitchen_data
-            ?.longitude,
-
-          food.kitchenData
-            ?.longitude,
-
-          food.location
-            ?.longitude,
-
-          food.location
-            ?.lng,
-
-          food.coordinates
-            ?.longitude,
-
-          food.coordinates
-            ?.lng,
-
-          food.kitchen
-            ?.location
-            ?.longitude,
-
-          food.kitchen
-            ?.location
-            ?.lng,
-
-          food.kitchen
-            ?.coordinates
-            ?.longitude,
-
-          food.kitchen
-            ?.coordinates
-            ?.lng,
-        ];
-
-        for (
-          const value of candidates
-        ) {
-          const number =
-            toNumber(value);
-
-          if (
-            number !== null &&
-            number >= -180 &&
-            number <= 180
-          ) {
-            return number;
-          }
-        }
-
-        return null;
-      },
-      [toNumber]
-    );
-
-  // ==========================================================
-  // HAVERSINE DISTANCE
-  // ==========================================================
-  //
-  // Returns distance in KM.
-  //
-  // ==========================================================
-
-  const calculateDistanceKm =
-    useCallback(
-      (
-        lat1,
-        lon1,
-        lat2,
-        lon2
-      ) => {
-        const earthRadiusKm =
-          6371;
-
-        const dLat =
-          ((lat2 - lat1) *
-            Math.PI) /
-          180;
-
-        const dLon =
-          ((lon2 - lon1) *
-            Math.PI) /
-          180;
-
-        const a =
-          Math.sin(
-            dLat / 2
-          ) **
-            2 +
-          Math.cos(
-            (lat1 * Math.PI) /
-              180
-          ) *
-            Math.cos(
-              (lat2 * Math.PI) /
-                180
-            ) *
-            Math.sin(
-              dLon / 2
-            ) **
-              2;
-
-        const c =
-          2 *
-          Math.atan2(
-            Math.sqrt(a),
-            Math.sqrt(1 - a)
-          );
-
-        return (
-          earthRadiusKm * c
-        );
-      },
-      []
-    );
-
-  // ==========================================================
-  // ADD DISTANCE TO FOOD
-  // ==========================================================
-
-  const addDistanceToFood =
+  const getNearbyFoods =
     useCallback(
       (
         foods,
         location
       ) => {
         if (
-          !Array.isArray(
-            foods
-          )
+          !Array.isArray(foods)
         ) {
           return [];
         }
 
-        if (!location) {
+        if (
+          !location
+        ) {
           return [];
         }
 
-        const {
-          latitude:
-            userLatitude,
-          longitude:
-            userLongitude,
-        } = location;
-
-        const foodsWithDistance =
-          foods
-            .map((food) => {
-              const kitchenLatitude =
-                getLatitude(
-                  food
-                );
-
-              const kitchenLongitude =
-                getLongitude(
-                  food
-                );
-
-              // --------------------------------------------
-              // Kitchen has no GPS
-              // --------------------------------------------
-
-              if (
-                kitchenLatitude ===
-                  null ||
-                kitchenLongitude ===
-                  null
-              ) {
-                return null;
-              }
-
-              const distance =
-                calculateDistanceKm(
-                  userLatitude,
-                  userLongitude,
-                  kitchenLatitude,
-                  kitchenLongitude
-                );
-
-              return {
-                ...food,
-
-                distance_km:
-                  Number(
-                    distance.toFixed(
-                      2
-                    )
-                  ),
-              };
-            })
-            .filter(Boolean)
-            .filter(
-              (food) =>
-                food.distance_km <=
-                NEARBY_RADIUS_KM
-            )
-            .sort(
-              (a, b) =>
-                a.distance_km -
-                b.distance_km
-            );
-
-        console.log(
-          `NEARBY FOOD: ${foodsWithDistance.length} items within ${NEARBY_RADIUS_KM} KM`
-        );
-
-        return foodsWithDistance;
-      },
-      [
-        getLatitude,
-        getLongitude,
-        calculateDistanceKm,
-      ]
-    );
-
-  // ==========================================================
-  // ALL FOODS
-  // ==========================================================
-
-  const fetchAllFoods =
-    useCallback(
-      async (
-        locationOverride = null
-      ) => {
-        try {
-          const headers =
-            await getHeaders();
-
-          const response =
-            await fetch(
-              `${BASE_URL}/api/v1/get/fooditems`,
-              {
-                method: "GET",
-                headers,
-              }
-            );
-
-          const data =
-            await parseJsonResponse(
-              response
-            );
-
-          console.log(
-            "ALL FOODS STATUS:",
-            response.status
+        const userLatitude =
+          toNumber(
+            location.latitude
           );
 
-          if (!response.ok) {
+        const userLongitude =
+          toNumber(
+            location.longitude
+          );
+
+        if (
+          userLatitude === null ||
+          userLongitude === null
+        ) {
+          return [];
+        }
+
+        const nearby = [];
+
+        for (
+          const food of foods
+        ) {
+          const normalized =
+            normalizeFood(food);
+
+          if (!normalized) {
+            continue;
+          }
+
+          if (
+            normalized.latitude ===
+              null ||
+            normalized.longitude ===
+              null
+          ) {
             console.log(
-              "ALL FOODS API ERROR:",
-              response.status
+              "FOOD/KITCHEN HAS NO COORDINATES:",
+              normalized.name,
+              normalized.id
             );
 
-            setAllFoods([]);
-
-            return [];
+            continue;
           }
 
-          const foods =
-            extractFoods(data)
-              .map(
-                normalizeFood
-              )
-              .filter(Boolean);
-
-          // --------------------------------------------------
-          // FILTER BY CURRENT LOCATION
-          // --------------------------------------------------
-
-          const nearbyFoods =
-            addDistanceToFood(
-              foods,
-              locationOverride
+          const distance =
+            calculateDistanceKm(
+              userLatitude,
+              userLongitude,
+              normalized.latitude,
+              normalized.longitude
             );
 
-          setAllFoods(
-            nearbyFoods
-          );
+          if (
+            distance === null
+          ) {
+            continue;
+          }
 
-          return nearbyFoods;
-        } catch (error) {
-          console.log(
-            "ALL FOODS ERROR:",
-            error
-          );
+          if (
+            distance <=
+            NEARBY_RADIUS_KM
+          ) {
+            nearby.push({
+              ...normalized,
 
-          setAllFoods([]);
-
-          return [];
+              distance_km:
+                Number(
+                  distance.toFixed(
+                    1
+                  )
+                ),
+            });
+          }
         }
+
+        return nearby;
       },
-      [
-        getHeaders,
-        parseJsonResponse,
-        extractFoods,
-        normalizeFood,
-        addDistanceToFood,
-      ]
+      [normalizeFood]
     );
 
   // ==========================================================
-  // TOP RATED
+  // LOAD USER
   // ==========================================================
 
-  const fetchTopRatedFoods =
-    useCallback(
-      async (
-        locationOverride = null
-      ) => {
-        try {
-          const headers =
-            await getHeaders();
-
-          const response =
-            await fetch(
-              `${BASE_URL}/api/v1/top-rated-foods`,
-              {
-                method: "GET",
-                headers,
-              }
-            );
-
-          const data =
-            await parseJsonResponse(
-              response
-            );
-
-          console.log(
-            "TOP RATED STATUS:",
-            response.status
+  const loadUser =
+    useCallback(async () => {
+      try {
+        const stored =
+          await AsyncStorage.getItem(
+            "user"
           );
 
-          if (!response.ok) {
-            setTopRatedFoods([]);
+        if (stored) {
+          try {
+            setUser(
+              JSON.parse(stored)
+            );
 
-            return [];
+            return;
+          } catch (error) {
+            console.log(
+              "STORED USER PARSE ERROR:",
+              error
+            );
           }
-
-          const foods =
-            extractFoods(data)
-              .map(
-                normalizeFood
-              )
-              .filter(Boolean);
-
-          const nearbyFoods =
-            addDistanceToFood(
-              foods,
-              locationOverride
-            );
-
-          setTopRatedFoods(
-            nearbyFoods
-          );
-
-          return nearbyFoods;
-        } catch (error) {
-          console.log(
-            "TOP RATED ERROR:",
-            error
-          );
-
-          setTopRatedFoods([]);
-
-          return [];
         }
-      },
-      [
-        getHeaders,
-        parseJsonResponse,
-        extractFoods,
-        normalizeFood,
-        addDistanceToFood,
-      ]
-    );
 
-  // ==========================================================
-  // RECOMMENDED
-  // ==========================================================
+        const token =
+          await getToken();
 
-  const fetchRecommendedFoods =
-    useCallback(
-      async (
-        locationOverride = null
-      ) => {
-        try {
-          const headers =
-            await getHeaders();
+        if (!token) {
+          return;
+        }
 
-          const response =
-            await fetch(
-              `${BASE_URL}/api/v1/recommended-foods`,
-              {
-                method: "GET",
-                headers,
-              }
-            );
+        const headers =
+          await getHeaders();
 
-          const data =
-            await parseJsonResponse(
-              response
-            );
-
-          console.log(
-            "RECOMMENDED STATUS:",
-            response.status
+        const response =
+          await fetch(
+            `${BASE_URL}/api/v1/users/profile`,
+            {
+              method: "GET",
+              headers,
+            }
           );
 
-          if (!response.ok) {
-            setRecommendedFoods(
-              []
-            );
+        const data =
+          await parseJsonResponse(
+            response
+          );
 
-            return [];
+        if (response.ok) {
+          const profile =
+            data?.user ||
+            data?.data ||
+            data;
+
+          if (
+            profile &&
+            typeof profile ===
+              "object"
+          ) {
+            setUser(profile);
+
+            await AsyncStorage.setItem(
+              "user",
+              JSON.stringify(
+                profile
+              )
+            );
           }
-
-          const foods =
-            extractFoods(data)
-              .map(
-                normalizeFood
-              )
-              .filter(Boolean);
-
-          const nearbyFoods =
-            addDistanceToFood(
-              foods,
-              locationOverride
-            );
-
-          setRecommendedFoods(
-            nearbyFoods
-          );
-
-          return nearbyFoods;
-        } catch (error) {
-          console.log(
-            "RECOMMENDED ERROR:",
-            error
-          );
-
-          setRecommendedFoods(
-            []
-          );
-
-          return [];
         }
-      },
-      [
-        getHeaders,
-        parseJsonResponse,
-        extractFoods,
-        normalizeFood,
-        addDistanceToFood,
-      ]
-    );
+      } catch (error) {
+        console.log(
+          "LOAD USER ERROR:",
+          error
+        );
+      }
+    }, [
+      getToken,
+      getHeaders,
+      parseJsonResponse,
+    ]);
 
   // ==========================================================
   // UNREAD NOTIFICATIONS
@@ -1269,7 +896,6 @@ export default function HomeScreen() {
 
         if (!response.ok) {
           setUnreadCount(0);
-
           return;
         }
 
@@ -1284,7 +910,7 @@ export default function HomeScreen() {
         );
       } catch (error) {
         console.log(
-          "UNREAD COUNT ERROR:",
+          "NOTIFICATION COUNT ERROR:",
           error
         );
 
@@ -1296,7 +922,533 @@ export default function HomeScreen() {
     ]);
 
   // ==========================================================
-  // LOAD HOME DATA
+  // FETCH ALL FOOD ITEMS
+  //
+  // IMPORTANT:
+  // We intentionally use /get/fooditems here.
+  //
+  // This gives us ALL foods so we can filter them ourselves
+  // according to the user's selected location.
+  // ==========================================================
+
+  const fetchNearbyFoods =
+    useCallback(
+      async (location) => {
+        try {
+          if (!location) {
+            setTopRatedFoods([]);
+            setRecommendedFoods([]);
+
+            return [];
+          }
+
+          const headers =
+            await getHeaders();
+
+          const response =
+            await fetch(
+              `${BASE_URL}/api/v1/get/fooditems`,
+              {
+                method: "GET",
+                headers,
+              }
+            );
+
+          const data =
+            await parseJsonResponse(
+              response
+            );
+
+          console.log(
+            "ALL FOOD ITEMS STATUS:",
+            response.status
+          );
+
+          if (!response.ok) {
+            console.log(
+              "ALL FOOD ITEMS ERROR RESPONSE:",
+              data
+            );
+
+            setTopRatedFoods([]);
+            setRecommendedFoods([]);
+
+            return [];
+          }
+
+          const foods =
+            extractFoods(data);
+
+          console.log(
+            "TOTAL FOOD ITEMS FROM API:",
+            foods.length
+          );
+
+          // ----------------------------------------------------
+          // FILTER BY SELECTED LOCATION
+          // ----------------------------------------------------
+
+          const nearbyFoods =
+            getNearbyFoods(
+              foods,
+              location
+            );
+
+          console.log(
+            `FOODS WITHIN ${NEARBY_RADIUS_KM} KM:`,
+            nearbyFoods.length
+          );
+
+          // ----------------------------------------------------
+          // RECOMMENDED
+          //
+          // ALL nearby foods.
+          // Nearest foods appear first.
+          // ----------------------------------------------------
+
+          const recommended =
+            [...nearbyFoods].sort(
+              (a, b) =>
+                Number(
+                  a.distance_km || 0
+                ) -
+                Number(
+                  b.distance_km || 0
+                )
+            );
+
+          // ----------------------------------------------------
+          // TOP RATED
+          //
+          // ALL nearby foods.
+          // Highest rated foods appear first.
+          // Distance is the tie breaker.
+          // ----------------------------------------------------
+
+          const topRated =
+            [...nearbyFoods].sort(
+              (a, b) => {
+                const ratingA =
+                  Number(
+                    a.rating || 0
+                  );
+
+                const ratingB =
+                  Number(
+                    b.rating || 0
+                  );
+
+                if (
+                  ratingB !==
+                  ratingA
+                ) {
+                  return (
+                    ratingB -
+                    ratingA
+                  );
+                }
+
+                return (
+                  Number(
+                    a.distance_km ||
+                      0
+                  ) -
+                  Number(
+                    b.distance_km ||
+                      0
+                  )
+                );
+              }
+            );
+
+          setRecommendedFoods(
+            recommended
+          );
+
+          setTopRatedFoods(
+            topRated
+          );
+
+          return nearbyFoods;
+        } catch (error) {
+          console.log(
+            "FETCH NEARBY FOOD ERROR:",
+            error
+          );
+
+          setRecommendedFoods([]);
+          setTopRatedFoods([]);
+
+          return [];
+        }
+      },
+      [
+        getHeaders,
+        parseJsonResponse,
+        extractFoods,
+        getNearbyFoods,
+      ]
+    );
+
+  // ==========================================================
+  // SAVE LOCATION
+  // ==========================================================
+
+  const saveSelectedLocation =
+    useCallback(
+      async (location) => {
+        try {
+          await AsyncStorage.setItem(
+            SELECTED_LOCATION_KEY,
+            JSON.stringify(
+              location
+            )
+          );
+        } catch (error) {
+          console.log(
+            "SAVE LOCATION ERROR:",
+            error
+          );
+        }
+      },
+      []
+    );
+
+  // ==========================================================
+  // LOAD SAVED LOCATION
+  // ==========================================================
+
+  const loadSavedLocation =
+    useCallback(async () => {
+      try {
+        const stored =
+          await AsyncStorage.getItem(
+            SELECTED_LOCATION_KEY
+          );
+
+        if (!stored) {
+          return null;
+        }
+
+        const parsed =
+          JSON.parse(stored);
+
+        if (
+          !parsed ||
+          parsed.latitude ===
+            undefined ||
+          parsed.longitude ===
+            undefined
+        ) {
+          return null;
+        }
+
+        return parsed;
+      } catch (error) {
+        console.log(
+          "LOAD SAVED LOCATION ERROR:",
+          error
+        );
+
+        return null;
+      }
+    }, []);
+
+  // ==========================================================
+  // CURRENT DEVICE LOCATION
+  // ==========================================================
+
+  const getCurrentLocation =
+    useCallback(async () => {
+      try {
+        setLocationError("");
+        setLocationLoading(true);
+
+        const permission =
+          await Location.requestForegroundPermissionsAsync();
+
+        if (
+          permission.status !==
+          "granted"
+        ) {
+          setLocationError(
+            "Location permission was not granted."
+          );
+
+          return null;
+        }
+
+        const position =
+          await Location.getCurrentPositionAsync(
+            {
+              accuracy:
+                Location.Accuracy.Balanced,
+            }
+          );
+
+        const latitude =
+          position.coords.latitude;
+
+        const longitude =
+          position.coords.longitude;
+
+        let address =
+          "Current Location";
+
+        try {
+          const addresses =
+            await Location.reverseGeocodeAsync(
+              {
+                latitude,
+                longitude,
+              }
+            );
+
+          if (
+            addresses &&
+            addresses.length >
+              0
+          ) {
+            const item =
+              addresses[0];
+
+            address = [
+              item.name,
+              item.street,
+              item.district,
+              item.city,
+              item.region,
+            ]
+              .filter(Boolean)
+              .join(", ");
+          }
+        } catch (error) {
+          console.log(
+            "REVERSE GEOCODE ERROR:",
+            error
+          );
+        }
+
+        const location = {
+          latitude,
+          longitude,
+          address:
+            address ||
+            "Current Location",
+        };
+
+        setSelectedLocation(
+          location
+        );
+
+        setLocationText(
+          location.address
+        );
+
+        await saveSelectedLocation(
+          location
+        );
+
+        // ------------------------------------------------------
+        // IMPORTANT:
+        // Immediately load ALL nearby foods.
+        // ------------------------------------------------------
+
+        await fetchNearbyFoods(
+          location
+        );
+
+        return location;
+      } catch (error) {
+        console.log(
+          "CURRENT LOCATION ERROR:",
+          error
+        );
+
+        setLocationError(
+          "Unable to get your current location."
+        );
+
+        return null;
+      } finally {
+        setLocationLoading(
+          false
+        );
+      }
+    }, [
+      saveSelectedLocation,
+      fetchNearbyFoods,
+    ]);
+
+  // ==========================================================
+  // SEARCH / GEOCODE TYPED LOCATION
+  // ==========================================================
+
+  const searchLocation =
+    useCallback(async () => {
+      const query =
+        locationText.trim();
+
+      Keyboard.dismiss();
+
+      if (!query) {
+        Alert.alert(
+          "Location Required",
+          "Please enter a location such as Gachibowli, Hyderabad."
+        );
+
+        return;
+      }
+
+      try {
+        setLocationError("");
+        setLocationLoading(true);
+
+        const results =
+          await Location.geocodeAsync(
+            query
+          );
+
+        if (
+          !results ||
+          results.length ===
+            0
+        ) {
+          Alert.alert(
+            "Location Not Found",
+            `We could not find "${query}". Please enter a more specific location.`
+          );
+
+          return;
+        }
+
+        const result =
+          results[0];
+
+        const latitude =
+          toNumber(
+            result.latitude
+          );
+
+        const longitude =
+          toNumber(
+            result.longitude
+          );
+
+        if (
+          latitude === null ||
+          longitude === null
+        ) {
+          Alert.alert(
+            "Invalid Location",
+            "The selected location does not have valid coordinates."
+          );
+
+          return;
+        }
+
+        let displayAddress =
+          query;
+
+        try {
+          const addresses =
+            await Location.reverseGeocodeAsync(
+              {
+                latitude,
+                longitude,
+              }
+            );
+
+          if (
+            addresses &&
+            addresses.length >
+              0
+          ) {
+            const item =
+              addresses[0];
+
+            const formatted = [
+              item.name,
+              item.street,
+              item.district,
+              item.city,
+              item.region,
+            ]
+              .filter(Boolean)
+              .join(", ");
+
+            if (
+              formatted.trim()
+            ) {
+              displayAddress =
+                formatted;
+            }
+          }
+        } catch (error) {
+          console.log(
+            "SEARCH REVERSE GEOCODE ERROR:",
+            error
+          );
+        }
+
+        const location = {
+          latitude,
+          longitude,
+          address:
+            displayAddress,
+        };
+
+        // ------------------------------------------------------
+        // SET SELECTED LOCATION
+        // ------------------------------------------------------
+
+        setSelectedLocation(
+          location
+        );
+
+        setLocationText(
+          displayAddress
+        );
+
+        // ------------------------------------------------------
+        // SAVE SELECTED LOCATION
+        // ------------------------------------------------------
+
+        await saveSelectedLocation(
+          location
+        );
+
+        // ------------------------------------------------------
+        // IMPORTANT:
+        // Load ALL foods and filter using this exact location.
+        // ------------------------------------------------------
+
+        await fetchNearbyFoods(
+          location
+        );
+      } catch (error) {
+        console.log(
+          "SEARCH LOCATION ERROR:",
+          error
+        );
+
+        Alert.alert(
+          "Location Search Error",
+          "Unable to search this location. Please try again."
+        );
+      } finally {
+        setLocationLoading(
+          false
+        );
+      }
+    }, [
+      locationText,
+      saveSelectedLocation,
+      fetchNearbyFoods,
+    ]);
+
+  // ==========================================================
+  // LOAD HOME
   // ==========================================================
 
   const loadHomeData =
@@ -1306,55 +1458,50 @@ export default function HomeScreen() {
       ) => {
         try {
           if (showLoader) {
-            setIsLoading(
-              true
+            setIsLoading(true);
+          }
+
+          await Promise.all([
+            loadUser(),
+            fetchUnreadCount(),
+          ]);
+
+          let location =
+            await loadSavedLocation();
+
+          // ----------------------------------------------------
+          // No saved location:
+          // use current device location.
+          // ----------------------------------------------------
+
+          if (!location) {
+            location =
+              await getCurrentLocation();
+          } else {
+            setSelectedLocation(
+              location
+            );
+
+            setLocationText(
+              location.address ||
+                ""
             );
           }
 
-          // --------------------------------------------------
-          // IMPORTANT:
-          // Get current GPS FIRST.
-          // --------------------------------------------------
-
-          const location =
-            await getCurrentLocation();
-
           if (!location) {
-            setAllFoods([]);
             setTopRatedFoods([]);
-            setRecommendedFoods(
-              []
-            );
-
-            await Promise.all([
-              loadUser(),
-              fetchUnreadCount(),
-            ]);
+            setRecommendedFoods([]);
 
             return;
           }
 
-          // --------------------------------------------------
-          // Load only location-filtered food
-          // --------------------------------------------------
+          // ----------------------------------------------------
+          // Load ALL nearby foods.
+          // ----------------------------------------------------
 
-          await Promise.all([
-            loadUser(),
-
-            fetchAllFoods(
-              location
-            ),
-
-            fetchTopRatedFoods(
-              location
-            ),
-
-            fetchRecommendedFoods(
-              location
-            ),
-
-            fetchUnreadCount(),
-          ]);
+          await fetchNearbyFoods(
+            location
+          );
         } catch (error) {
           console.log(
             "HOME LOAD ERROR:",
@@ -1362,21 +1509,18 @@ export default function HomeScreen() {
           );
         } finally {
           if (showLoader) {
-            setIsLoading(
-              false
-            );
+            setIsLoading(false);
           }
 
           setRefreshing(false);
         }
       },
       [
-        getCurrentLocation,
         loadUser,
-        fetchAllFoods,
-        fetchTopRatedFoods,
-        fetchRecommendedFoods,
         fetchUnreadCount,
+        loadSavedLocation,
+        getCurrentLocation,
+        fetchNearbyFoods,
       ]
     );
 
@@ -1401,9 +1545,28 @@ export default function HomeScreen() {
       setRefreshing(true);
 
       try {
-        await loadHomeData(
-          false
-        );
+        let location =
+          selectedLocation;
+
+        if (!location) {
+          location =
+            await loadSavedLocation();
+        }
+
+        if (!location) {
+          location =
+            await getCurrentLocation();
+        }
+
+        if (location) {
+          await Promise.all([
+            fetchNearbyFoods(
+              location
+            ),
+            loadUser(),
+            fetchUnreadCount(),
+          ]);
+        }
       } catch (error) {
         console.log(
           "REFRESH ERROR:",
@@ -1413,312 +1576,133 @@ export default function HomeScreen() {
         setRefreshing(false);
       }
     }, [
-      loadHomeData,
       refreshing,
+      selectedLocation,
+      loadSavedLocation,
+      getCurrentLocation,
+      fetchNearbyFoods,
+      loadUser,
+      fetchUnreadCount,
     ]);
 
   // ==========================================================
   // GREETING
   // ==========================================================
 
-  const getGreeting = () => {
-    const hour =
-      new Date().getHours();
+  const getGreeting =
+    useCallback(() => {
+      const hour =
+        new Date().getHours();
 
-    if (hour < 12) {
-      return "Good Morning";
-    }
+      if (hour < 12) {
+        return "Good Morning";
+      }
 
-    if (hour < 17) {
-      return "Good Afternoon";
-    }
+      if (hour < 17) {
+        return "Good Afternoon";
+      }
 
-    return "Good Evening";
-  };
+      return "Good Evening";
+    }, []);
 
   // ==========================================================
   // USER NAME
   // ==========================================================
 
-  const getUserName = () => {
-    return (
-      user?.name ||
-      user?.full_name ||
-      user?.fullName ||
-      user?.username ||
-      "Food Lover"
-    );
-  };
+  const getUserName =
+    useCallback(() => {
+      return (
+        user?.name ||
+        user?.full_name ||
+        user?.fullName ||
+        user?.username ||
+        "Food Lover"
+      );
+    }, [user]);
 
   // ==========================================================
   // USER IMAGE
   // ==========================================================
 
-  const getUserImage = () => {
-    const image =
-      user?.image ||
-      user?.profile_photo ||
-      user?.profilePhoto ||
-      user?.profile_image ||
-      user?.image_url;
+  const getUserImage =
+    useCallback(() => {
+      const image =
+        user?.image ||
+        user?.profile_photo ||
+        user?.profilePhoto ||
+        user?.profile_image ||
+        user?.image_url;
 
-    return isValidImage(
-      image
-    )
-      ? image.trim()
-      : null;
-  };
+      return isValidImage(
+        image
+      )
+        ? image.trim()
+        : null;
+    }, [
+      user,
+      isValidImage,
+    ]);
 
   // ==========================================================
-  // OPEN DISH DETAIL
+  // OPEN DISH
   // ==========================================================
 
-  const openDish = (
-    food
-  ) => {
-    if (!food) {
-      return;
-    }
+  const openDish =
+    useCallback(
+      (food) => {
+        if (!food) {
+          return;
+        }
 
-    const normalizedFood =
-      normalizeFood(food);
+        const normalized =
+          normalizeFood(food);
 
-    if (
-      normalizedFood?.id ===
-        null ||
-      normalizedFood?.id ===
-        undefined ||
-      normalizedFood?.id === ""
-    ) {
-      console.log(
-        "FOOD ID MISSING:",
-        normalizedFood
-      );
+        if (
+          normalized?.id ===
+            null ||
+          normalized?.id ===
+            undefined ||
+          normalized?.id ===
+            ""
+        ) {
+          return;
+        }
 
-      return;
-    }
+        router.push({
+          pathname:
+            "/Dish_detail_screen",
 
-    router.push({
-      pathname:
-        "/Dish_detail_screen",
-
-      params: {
-        dish: JSON.stringify(
-          normalizedFood
-        ),
+          params: {
+            dish: JSON.stringify(
+              normalized
+            ),
+          },
+        });
       },
-    });
-  };
-
-  // ==========================================================
-  // OPEN SEARCH
-  // ==========================================================
-
-  const openSearch = () => {
-    router.push(
-      "/Search_screen"
+      [normalizeFood]
     );
-  };
 
   // ==========================================================
-  // OPEN NOTIFICATIONS
+  // SEARCH SCREEN
+  // ==========================================================
+
+  const openSearch =
+    useCallback(() => {
+      router.push(
+        "/Search_screen"
+      );
+    }, []);
+
+  // ==========================================================
+  // NOTIFICATIONS
   // ==========================================================
 
   const openNotifications =
-    () => {
+    useCallback(() => {
       router.push(
         "/Notification_screen"
       );
-    };
-
-  // ==========================================================
-  // FOOD CARD
-  // ==========================================================
-
-  const FoodCard = ({
-    item,
-  }) => {
-    const image =
-      getFoodImage(item);
-
-    const name =
-      item?.name ||
-      item?.food_name ||
-      "Food";
-
-    const description =
-      item?.description ||
-      "Delicious homemade food";
-
-    const price =
-      item?.price ??
-      item?.food_price ??
-      0;
-
-    const rating =
-      item?.rating ??
-      item?.average_rating ??
-      item?.avg_rating ??
-      0;
-
-    return (
-      <TouchableOpacity
-        activeOpacity={0.88}
-        style={[
-          styles.foodCard,
-          {
-            backgroundColor:
-              cardColor,
-            borderColor:
-              borderColor,
-          },
-        ]}
-        onPress={() =>
-          openDish(item)
-        }
-      >
-        <View
-          style={
-            styles.foodImageContainer
-          }
-        >
-          {image ? (
-            <Image
-              source={{
-                uri: image,
-              }}
-              style={
-                styles.foodImage
-              }
-              resizeMode="cover"
-            />
-          ) : (
-            <View
-              style={
-                styles.noImage
-              }
-            >
-              <Ionicons
-                name="restaurant-outline"
-                size={38}
-                color={
-                  COLORS.orange
-                }
-              />
-            </View>
-          )}
-
-          <View
-            style={
-              styles.ratingBadge
-            }
-          >
-            <Ionicons
-              name="star"
-              size={12}
-              color={
-                COLORS.gold
-              }
-            />
-
-            <Text
-              style={
-                styles.ratingText
-              }
-            >
-              {Number(
-                rating || 0
-              ).toFixed(1)}
-            </Text>
-          </View>
-        </View>
-
-        <View
-          style={
-            styles.foodDetails
-          }
-        >
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.foodName,
-              {
-                color:
-                  textColor,
-              },
-            ]}
-          >
-            {name}
-          </Text>
-
-          <Text
-            numberOfLines={2}
-            style={[
-              styles.foodDescription,
-              {
-                color:
-                  mutedColor,
-              },
-            ]}
-          >
-            {description}
-          </Text>
-
-          <View
-            style={
-              styles.foodBottom
-            }
-          >
-            <View>
-              <Text
-                style={
-                  styles.price
-                }
-              >
-                ₹
-                {Number(
-                  price || 0
-                ).toFixed(0)}
-              </Text>
-
-              {item?.distance_km !==
-                undefined && (
-                <Text
-                  style={[
-                    styles.distanceText,
-                    {
-                      color:
-                        mutedColor,
-                    },
-                  ]}
-                >
-                  {item.distance_km} km away
-                </Text>
-              )}
-            </View>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={
-                styles.arrowButton
-              }
-              onPress={() =>
-                openDish(item)
-              }
-            >
-              <Ionicons
-                name="arrow-forward"
-                size={18}
-                color={
-                  COLORS.white
-                }
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+    }, []);
 
   // ==========================================================
   // HORIZONTAL FOOD CARD
@@ -1745,11 +1729,14 @@ export default function HomeScreen() {
         item?.avg_rating ??
         0;
 
+      const distance =
+        item?.distance_km;
+
       return (
         <TouchableOpacity
-          activeOpacity={0.88}
+          activeOpacity={0.92}
           style={[
-            styles.horizontalCard,
+            styles.foodCard,
             {
               backgroundColor:
                 cardColor,
@@ -1763,7 +1750,7 @@ export default function HomeScreen() {
         >
           <View
             style={
-              styles.horizontalImageContainer
+              styles.foodImageWrapper
             }
           >
             {image ? (
@@ -1772,19 +1759,23 @@ export default function HomeScreen() {
                   uri: image,
                 }}
                 style={
-                  styles.horizontalImage
+                  styles.foodImage
                 }
                 resizeMode="cover"
               />
             ) : (
               <View
-                style={
-                  styles.horizontalNoImage
-                }
+                style={[
+                  styles.noImage,
+                  {
+                    backgroundColor:
+                      softColor,
+                  },
+                ]}
               >
                 <Ionicons
                   name="restaurant-outline"
-                  size={34}
+                  size={38}
                   color={
                     COLORS.orange
                   }
@@ -1792,14 +1783,16 @@ export default function HomeScreen() {
               </View>
             )}
 
+            {/* RATING */}
+
             <View
               style={
-                styles.smallRating
+                styles.ratingBadge
               }
             >
               <Ionicons
                 name="star"
-                size={10}
+                size={12}
                 color={
                   COLORS.gold
                 }
@@ -1807,7 +1800,7 @@ export default function HomeScreen() {
 
               <Text
                 style={
-                  styles.smallRatingText
+                  styles.ratingText
                 }
               >
                 {Number(
@@ -1815,46 +1808,103 @@ export default function HomeScreen() {
                 ).toFixed(1)}
               </Text>
             </View>
+
+            {/* DISTANCE */}
+
+            {distance !==
+              undefined &&
+              distance !==
+                null && (
+                <View
+                  style={
+                    styles.distanceBadge
+                  }
+                >
+                  <Ionicons
+                    name="location-outline"
+                    size={11}
+                    color={
+                      COLORS.white
+                    }
+                  />
+
+                  <Text
+                    style={
+                      styles.distanceBadgeText
+                    }
+                  >
+                    {Number(
+                      distance
+                    ).toFixed(1)}{" "}
+                    km
+                  </Text>
+                </View>
+              )}
           </View>
 
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.horizontalName,
-              {
-                color:
-                  textColor,
-              },
-            ]}
-          >
-            {name}
-          </Text>
-
-          <Text
+          <View
             style={
-              styles.horizontalPrice
+              styles.foodDetails
             }
           >
-            ₹
-            {Number(
-              price || 0
-            ).toFixed(0)}
-          </Text>
-
-          {item?.distance_km !==
-            undefined && (
             <Text
+              numberOfLines={1}
               style={[
-                styles.distanceText,
+                styles.foodName,
+                {
+                  color:
+                    textColor,
+                },
+              ]}
+            >
+              {name}
+            </Text>
+
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.foodDescription,
                 {
                   color:
                     mutedColor,
                 },
               ]}
             >
-              {item.distance_km} km away
+              {item?.description ||
+                "Homemade with love"}
             </Text>
-          )}
+
+            <View
+              style={
+                styles.foodFooter
+              }
+            >
+              <Text
+                style={
+                  styles.foodPrice
+                }
+              >
+                ₹
+                {Number(
+                  price || 0
+                ).toFixed(0)}
+              </Text>
+
+              <View
+                style={
+                  styles.viewButton
+                }
+              >
+                <Ionicons
+                  name="arrow-forward"
+                  size={16}
+                  color={
+                    COLORS.white
+                  }
+                />
+              </View>
+            </View>
+          </View>
         </TouchableOpacity>
       );
     };
@@ -1864,10 +1914,14 @@ export default function HomeScreen() {
   // ==========================================================
 
   const EmptySection =
-    ({ text }) => (
+    ({
+      icon,
+      title,
+      text,
+    }) => (
       <View
         style={[
-          styles.empty,
+          styles.emptyCard,
           {
             backgroundColor:
               cardColor,
@@ -1876,163 +1930,61 @@ export default function HomeScreen() {
           },
         ]}
       >
-        <Ionicons
-          name="restaurant-outline"
-          size={30}
-          color={
-            mutedColor
-          }
-        />
-
-        <Text
+        <View
           style={[
-            styles.emptyText,
+            styles.emptyIcon,
             {
-              color:
-                mutedColor,
+              backgroundColor:
+                softColor,
             },
           ]}
         >
-          {text}
-        </Text>
-      </View>
-    );
-
-  // ==========================================================
-  // LOCATION REQUIRED SCREEN
-  // ==========================================================
-
-  if (
-    !isLoading &&
-    !locationLoading &&
-    !currentLocation
-  ) {
-    return (
-      <SafeAreaView
-        style={[
-          styles.locationScreen,
-          {
-            backgroundColor:
-              backgroundColor,
-          },
-        ]}
-      >
-        <StatusBar
-          barStyle={
-            isDarkMode
-              ? "light-content"
-              : "dark-content"
-          }
-          backgroundColor={
-            backgroundColor
-          }
-        />
+          <Ionicons
+            name={
+              icon ||
+              "restaurant-outline"
+            }
+            size={25}
+            color={
+              COLORS.orange
+            }
+          />
+        </View>
 
         <View
           style={
-            styles.locationCard
+            styles.emptyContent
           }
         >
-          <View
-            style={
-              styles.locationIcon
-            }
-          >
-            <Ionicons
-              name="location"
-              size={42}
-              color={
-                COLORS.orange
-              }
-            />
-          </View>
-
           <Text
             style={[
-              styles.locationTitle,
+              styles.emptyTitle,
               {
                 color:
                   textColor,
               },
             ]}
           >
-            Location Required
+            {title}
           </Text>
 
           <Text
             style={[
-              styles.locationDescription,
+              styles.emptyText,
               {
                 color:
                   mutedColor,
               },
             ]}
           >
-            We use your current location to show homemade food from kitchens near you.
+            {text}
           </Text>
-
-          {locationError ? (
-            <Text
-              style={
-                styles.locationError
-              }
-            >
-              {locationError}
-            </Text>
-          ) : null}
-
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() =>
-              loadHomeData(
-                true
-              )
-            }
-            style={
-              styles.locationButton
-            }
-          >
-            <LinearGradient
-              colors={[
-                COLORS.orange,
-                COLORS.gold,
-              ]}
-              start={{
-                x: 0,
-                y: 0,
-              }}
-              end={{
-                x: 1,
-                y: 0,
-              }}
-              style={
-                styles.locationButtonGradient
-              }
-            >
-              <Ionicons
-                name="locate-outline"
-                size={20}
-                color={
-                  COLORS.white
-                }
-              />
-
-              <Text
-                style={
-                  styles.locationButtonText
-                }
-              >
-                Enable Location
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
-  }
 
   // ==========================================================
-  // LOADING
+  // LOADING SCREEN
   // ==========================================================
 
   if (isLoading) {
@@ -2057,11 +2009,40 @@ export default function HomeScreen() {
           }
         />
 
+        <LinearGradient
+          colors={[
+            COLORS.orange,
+            COLORS.gold,
+          ]}
+          start={{
+            x: 0,
+            y: 0,
+          }}
+          end={{
+            x: 1,
+            y: 1,
+          }}
+          style={
+            styles.loadingLogo
+          }
+        >
+          <Ionicons
+            name="restaurant"
+            size={32}
+            color={
+              COLORS.white
+            }
+          />
+        </LinearGradient>
+
         <ActivityIndicator
-          size="large"
+          size="small"
           color={
             COLORS.orange
           }
+          style={{
+            marginTop: 20,
+          }}
         />
 
         <Text
@@ -2073,7 +2054,20 @@ export default function HomeScreen() {
             },
           ]}
         >
-          Finding food near you...
+          Finding homemade food...
+        </Text>
+
+        <Text
+          style={[
+            styles.loadingSubText,
+            {
+              color:
+                mutedColor,
+            },
+          ]}
+        >
+          Checking kitchens within{" "}
+          {NEARBY_RADIUS_KM} km
         </Text>
       </SafeAreaView>
     );
@@ -2109,6 +2103,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={
           false
         }
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={
@@ -2162,25 +2157,31 @@ export default function HomeScreen() {
                   }
                 />
               ) : (
-                <View
-                  style={[
-                    styles.avatarPlaceholder,
-                    {
-                      backgroundColor:
-                        isDarkMode
-                          ? "#2A211B"
-                          : COLORS.lightOrange,
-                    },
+                <LinearGradient
+                  colors={[
+                    COLORS.orange,
+                    COLORS.gold,
                   ]}
+                  start={{
+                    x: 0,
+                    y: 0,
+                  }}
+                  end={{
+                    x: 1,
+                    y: 1,
+                  }}
+                  style={
+                    styles.avatarPlaceholder
+                  }
                 >
                   <Ionicons
                     name="person"
-                    size={23}
+                    size={22}
                     color={
-                      COLORS.orange
+                      COLORS.white
                     }
                   />
-                </View>
+                </LinearGradient>
               )}
             </View>
 
@@ -2213,43 +2214,20 @@ export default function HomeScreen() {
               >
                 {getUserName()}
               </Text>
-
-              {/* CURRENT LOCATION */}
-
-              <View
-                style={
-                  styles.nearbyLabel
-                }
-              >
-                <Ionicons
-                  name="location"
-                  size={11}
-                  color={
-                    COLORS.orange
-                  }
-                />
-
-                <Text
-                  style={
-                    styles.nearbyLabelText
-                  }
-                >
-                  Food within{" "}
-                  {NEARBY_RADIUS_KM} km
-                </Text>
-              </View>
             </View>
           </View>
 
           <View
             style={
-              styles.headerRight
+              styles.headerActions
             }
           >
+            {/* THEME */}
+
             <TouchableOpacity
               activeOpacity={0.8}
               style={[
-                styles.iconButton,
+                styles.headerButton,
                 {
                   backgroundColor:
                     cardColor,
@@ -2262,7 +2240,7 @@ export default function HomeScreen() {
                   toggleTheme();
                 } catch (error) {
                   console.log(
-                    "TOGGLE THEME ERROR:",
+                    "THEME ERROR:",
                     error
                   );
                 }
@@ -2274,7 +2252,7 @@ export default function HomeScreen() {
                     ? "sunny-outline"
                     : "moon-outline"
                 }
-                size={22}
+                size={20}
                 color={
                   isDarkMode
                     ? COLORS.gold
@@ -2283,10 +2261,12 @@ export default function HomeScreen() {
               />
             </TouchableOpacity>
 
+            {/* NOTIFICATIONS */}
+
             <TouchableOpacity
               activeOpacity={0.8}
               style={[
-                styles.iconButton,
+                styles.headerButton,
                 {
                   backgroundColor:
                     cardColor,
@@ -2300,7 +2280,7 @@ export default function HomeScreen() {
             >
               <Ionicons
                 name="notifications-outline"
-                size={23}
+                size={21}
                 color={
                   isDarkMode
                     ? COLORS.white
@@ -2332,11 +2312,264 @@ export default function HomeScreen() {
         </View>
 
         {/* ====================================================
+            LOCATION SEARCH
+        ==================================================== */}
+
+        <View
+          style={[
+            styles.locationSearchCard,
+            {
+              backgroundColor:
+                cardColor,
+              borderColor:
+                borderColor,
+            },
+          ]}
+        >
+          <View
+            style={
+              styles.locationSearchTop
+            }
+          >
+            <View
+              style={
+                styles.locationIcon
+              }
+            >
+              <Ionicons
+                name="location"
+                size={19}
+                color={
+                  COLORS.orange
+                }
+              />
+            </View>
+
+            <View
+              style={
+                styles.locationSearchTitleContainer
+              }
+            >
+              <Text
+                style={[
+                  styles.locationSmallTitle,
+                  {
+                    color:
+                      mutedColor,
+                  },
+                ]}
+              >
+                DELIVER FOOD NEAR
+              </Text>
+
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.selectedLocationText,
+                  {
+                    color:
+                      textColor,
+                  },
+                ]}
+              >
+                {selectedLocation
+                  ?.address ||
+                  "Choose your location"}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={
+                getCurrentLocation
+              }
+              disabled={
+                locationLoading
+              }
+              style={
+                styles.gpsButton
+              }
+            >
+              {locationLoading ? (
+                <ActivityIndicator
+                  size="small"
+                  color={
+                    COLORS.orange
+                  }
+                />
+              ) : (
+                <Ionicons
+                  name="locate-outline"
+                  size={21}
+                  color={
+                    COLORS.orange
+                  }
+                />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View
+            style={[
+              styles.locationInputRow,
+              {
+                backgroundColor:
+                  softColor,
+                borderColor:
+                  borderColor,
+              },
+            ]}
+          >
+            <Ionicons
+              name="search-outline"
+              size={19}
+              color={
+                COLORS.orange
+              }
+            />
+
+            <TextInput
+              value={
+                locationText
+              }
+              onChangeText={
+                setLocationText
+              }
+              placeholder="Enter location, area or city"
+              placeholderTextColor={
+                mutedColor
+              }
+              returnKeyType="search"
+              onSubmitEditing={
+                searchLocation
+              }
+              style={[
+                styles.locationInput,
+                {
+                  color:
+                    textColor,
+                },
+              ]}
+            />
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={
+                searchLocation
+              }
+              disabled={
+                locationLoading
+              }
+              style={
+                styles.locationSearchButton
+              }
+            >
+              {locationLoading ? (
+                <ActivityIndicator
+                  size="small"
+                  color={
+                    COLORS.white
+                  }
+                />
+              ) : (
+                <Ionicons
+                  name="arrow-forward"
+                  size={20}
+                  color={
+                    COLORS.white
+                  }
+                />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View
+            style={
+              styles.radiusRow
+            }
+          >
+            <Ionicons
+              name="radio-outline"
+              size={13}
+              color={
+                COLORS.orange
+              }
+            />
+
+            <Text
+              style={[
+                styles.radiusText,
+                {
+                  color:
+                    mutedColor,
+                },
+              ]}
+            >
+              Showing homemade food within{" "}
+              <Text
+                style={
+                  styles.radiusStrong
+                }
+              >
+                {NEARBY_RADIUS_KM} km
+              </Text>
+            </Text>
+          </View>
+
+          {locationError ? (
+            <Text
+              style={
+                styles.locationError
+              }
+            >
+              {locationError}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* ====================================================
+            WELCOME
+        ==================================================== */}
+
+        <View
+          style={
+            styles.welcomeSection
+          }
+        >
+          <Text
+            style={[
+              styles.welcomeTitle,
+              {
+                color:
+                  textColor,
+              },
+            ]}
+          >
+            What are you craving?
+          </Text>
+
+          <Text
+            style={[
+              styles.welcomeSubtitle,
+              {
+                color:
+                  mutedColor,
+              },
+            ]}
+          >
+            Discover delicious homemade meals around you.
+          </Text>
+        </View>
+
+        {/* ====================================================
             SEARCH
         ==================================================== */}
 
         <TouchableOpacity
           activeOpacity={0.9}
+          onPress={
+            openSearch
+          }
           style={[
             styles.searchContainer,
             {
@@ -2346,46 +2579,50 @@ export default function HomeScreen() {
                 borderColor,
             },
           ]}
-          onPress={
-            openSearch
-          }
         >
-          <Ionicons
-            name="search-outline"
-            size={22}
-            color={
-              mutedColor
+          <View
+            style={
+              styles.searchIconContainer
             }
-          />
+          >
+            <Ionicons
+              name="search"
+              size={20}
+              color={
+                COLORS.orange
+              }
+            />
+          </View>
 
-          <TextInput
-            value=""
-            editable={false}
-            pointerEvents="none"
-            placeholder="Search nearby food..."
-            placeholderTextColor={
-              mutedColor
-            }
+          <Text
             style={[
-              styles.searchInput,
+              styles.searchInputFake,
               {
                 color:
-                  textColor,
+                  mutedColor,
               },
             ]}
-          />
+          >
+            Search dishes, kitchens...
+          </Text>
 
-          <Ionicons
-            name="options-outline"
-            size={21}
-            color={
-              COLORS.orange
+          <View
+            style={
+              styles.searchFilterButton
             }
-          />
+          >
+            <Ionicons
+              name="options-outline"
+              size={20}
+              color={
+                COLORS.white
+              }
+            />
+          </View>
         </TouchableOpacity>
 
         {/* ====================================================
-            RECOMMENDED
+            RECOMMENDED HEADER
         ==================================================== */}
 
         <View
@@ -2393,7 +2630,11 @@ export default function HomeScreen() {
             styles.sectionHeader
           }
         >
-          <View>
+          <View
+            style={
+              styles.sectionHeaderLeft
+            }
+          >
             <Text
               style={[
                 styles.sectionTitle,
@@ -2403,7 +2644,7 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              Recommended Near You
+              Recommended for You
             </Text>
 
             <Text
@@ -2415,7 +2656,7 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              Handpicked dishes from nearby kitchens
+              All homemade food from kitchens near you
             </Text>
           </View>
 
@@ -2434,6 +2675,10 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* ====================================================
+            RECOMMENDED FOOD
+        ==================================================== */}
 
         {recommendedFoods.length >
         0 ? (
@@ -2457,14 +2702,18 @@ export default function HomeScreen() {
                       item?.food_id ??
                       index
                   )}
-                  item={item}
+                  item={
+                    item
+                  }
                 />
               )
             )}
           </ScrollView>
         ) : (
           <EmptySection
-            text={`No recommended food within ${NEARBY_RADIUS_KM} km`}
+            icon="sparkles-outline"
+            title="No nearby food"
+            text={`No food was found from kitchens within ${NEARBY_RADIUS_KM} km of this location.`}
           />
         )}
 
@@ -2476,11 +2725,15 @@ export default function HomeScreen() {
           style={[
             styles.sectionHeader,
             {
-              marginTop: 10,
+              marginTop: 28,
             },
           ]}
         >
-          <View>
+          <View
+            style={
+              styles.sectionHeaderLeft
+            }
+          >
             <Text
               style={[
                 styles.sectionTitle,
@@ -2502,7 +2755,7 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              Loved by customers near you
+              All nearby food sorted by customer rating
             </Text>
           </View>
 
@@ -2521,6 +2774,10 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* ====================================================
+            TOP RATED FOOD
+        ==================================================== */}
 
         {topRatedFoods.length >
         0 ? (
@@ -2544,97 +2801,18 @@ export default function HomeScreen() {
                       item?.food_id ??
                       index
                   )}
-                  item={item}
+                  item={
+                    item
+                  }
                 />
               )
             )}
           </ScrollView>
         ) : (
           <EmptySection
-            text={`No top rated food within ${NEARBY_RADIUS_KM} km`}
-          />
-        )}
-
-        {/* ====================================================
-            ALL NEARBY FOOD
-        ==================================================== */}
-
-        <View
-          style={[
-            styles.sectionHeader,
-            {
-              marginTop: 10,
-            },
-          ]}
-        >
-          <View>
-            <Text
-              style={[
-                styles.sectionTitle,
-                {
-                  color:
-                    textColor,
-                },
-              ]}
-            >
-              Nearby Food
-            </Text>
-
-            <Text
-              style={[
-                styles.sectionSubtitle,
-                {
-                  color:
-                    mutedColor,
-                },
-              ]}
-            >
-              Homemade food from kitchens near you
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={
-              openSearch
-            }
-          >
-            <Text
-              style={
-                styles.seeAll
-              }
-            >
-              Search
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {allFoods.length >
-        0 ? (
-          <View
-            style={
-              styles.foodGrid
-            }
-          >
-            {allFoods.map(
-              (
-                item,
-                index
-              ) => (
-                <FoodCard
-                  key={String(
-                    item?.id ??
-                      item?.food_id ??
-                      index
-                  )}
-                  item={item}
-                />
-              )
-            )}
-          </View>
-        ) : (
-          <EmptySection
-            text={`No food found within ${NEARBY_RADIUS_KM} km of your location`}
+            icon="star-outline"
+            title="No top-rated food nearby"
+            text={`No food was found from kitchens within ${NEARBY_RADIUS_KM} km of this location.`}
           />
         )}
 
@@ -2648,130 +2826,49 @@ export default function HomeScreen() {
   );
 }
 
-// ================================================================
+// ============================================================
 // STYLES
-// ================================================================
+// ============================================================
 
 const styles =
   StyleSheet.create({
+    // ========================================================
+    // MAIN
+    // ========================================================
+
     container: {
       flex: 1,
-      backgroundColor:
-        COLORS.background,
     },
 
     scrollContent: {
-      paddingHorizontal: 16,
-      paddingBottom: 20,
+      paddingHorizontal: 17,
+      paddingBottom: 30,
     },
 
-    // ==========================================================
-    // LOCATION SCREEN
-    // ==========================================================
-
-    locationScreen: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent:
-        "center",
-      paddingHorizontal: 25,
-    },
-
-    locationCard: {
-      width: "100%",
-      alignItems: "center",
-      padding: 30,
-      borderRadius: 25,
-      backgroundColor:
-        COLORS.white,
-      elevation: 5,
-      shadowColor: "#000",
-      shadowOffset: {
-        width: 0,
-        height: 5,
-      },
-      shadowOpacity: 0.1,
-      shadowRadius: 15,
-    },
-
-    locationIcon: {
-      width: 85,
-      height: 85,
-      borderRadius: 42.5,
-      backgroundColor:
-        COLORS.lightOrange,
-      alignItems: "center",
-      justifyContent:
-        "center",
-      marginBottom: 20,
-    },
-
-    locationTitle: {
-      fontSize: 24,
-      fontWeight: "800",
-      textAlign: "center",
-    },
-
-    locationDescription: {
-      fontSize: 14,
-      lineHeight: 22,
-      textAlign: "center",
-      marginTop: 10,
-    },
-
-    locationError: {
-      color: COLORS.red,
-      fontSize: 12,
-      textAlign: "center",
-      marginTop: 12,
-    },
-
-    locationButton: {
-      width: "100%",
-      height: 54,
-      borderRadius: 17,
-      overflow: "hidden",
-      marginTop: 22,
-    },
-
-    locationButtonGradient: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent:
-        "center",
-      gap: 8,
-    },
-
-    locationButtonText: {
-      color: COLORS.white,
-      fontSize: 16,
-      fontWeight: "700",
-    },
-
-    // ==========================================================
+    // ========================================================
     // HEADER
-    // ==========================================================
+    // ========================================================
 
     header: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent:
         "space-between",
-      paddingTop: 8,
-      paddingBottom: 10,
+      paddingTop: 9,
+      paddingBottom: 12,
     },
 
     headerLeft: {
       flexDirection: "row",
       alignItems: "center",
       flex: 1,
+      paddingRight: 12,
     },
 
     avatarContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+      width: 49,
+      height: 49,
+      borderRadius: 25,
       overflow: "hidden",
       marginRight: 11,
     },
@@ -2793,35 +2890,25 @@ const styles =
     },
 
     greeting: {
-      fontSize: 12,
+      fontSize: 11,
+      fontWeight: "500",
       marginBottom: 2,
+      letterSpacing: 0.2,
     },
 
     userName: {
-      fontSize: 17,
-      fontWeight: "700",
+      fontSize: 18,
+      fontWeight: "800",
+      letterSpacing: -0.3,
     },
 
-    nearbyLabel: {
-      flexDirection: "row",
-      alignItems: "center",
-      marginTop: 3,
-    },
-
-    nearbyLabelText: {
-      marginLeft: 3,
-      color: COLORS.orange,
-      fontSize: 10,
-      fontWeight: "600",
-    },
-
-    headerRight: {
+    headerActions: {
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
     },
 
-    iconButton: {
+    headerButton: {
       width: 42,
       height: 42,
       borderRadius: 21,
@@ -2844,158 +2931,262 @@ const styles =
       justifyContent:
         "center",
       paddingHorizontal: 4,
+      borderWidth: 2,
+      borderColor:
+        COLORS.white,
     },
 
     notificationText: {
       color: COLORS.white,
-      fontSize: 9,
-      fontWeight: "800",
+      fontSize: 8,
+      fontWeight: "900",
     },
 
-    // ==========================================================
-    // SEARCH
-    // ==========================================================
+    // ========================================================
+    // LOCATION SEARCH
+    // ========================================================
 
-    searchContainer: {
-      height: 52,
-      borderRadius: 16,
+    locationSearchCard: {
+      borderRadius: 20,
+      borderWidth: 1,
+      padding: 12,
+      marginBottom: 20,
+    },
+
+    locationSearchTop: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 15,
-      marginBottom: 26,
-      borderWidth: 1,
     },
 
-    searchInput: {
+    locationIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor:
+        COLORS.lightOrange,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    locationSearchTitleContainer: {
+      flex: 1,
+      marginLeft: 10,
+      paddingRight: 8,
+    },
+
+    locationSmallTitle: {
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+
+    selectedLocationText: {
+      fontSize: 13,
+      fontWeight: "800",
+      marginTop: 3,
+    },
+
+    gpsButton: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor:
+        COLORS.lightOrange,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    locationInputRow: {
+      height: 52,
+      borderRadius: 15,
+      borderWidth: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      paddingLeft: 13,
+      paddingRight: 6,
+      marginTop: 11,
+    },
+
+    locationInput: {
       flex: 1,
       height: "100%",
-      marginHorizontal: 10,
-      fontSize: 14,
+      fontSize: 13,
+      fontWeight: "500",
+      marginHorizontal: 9,
     },
 
-    // ==========================================================
+    locationSearchButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 13,
+      backgroundColor:
+        COLORS.orange,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    radiusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 9,
+      paddingHorizontal: 3,
+    },
+
+    radiusText: {
+      fontSize: 10,
+      marginLeft: 5,
+    },
+
+    radiusStrong: {
+      color: COLORS.orange,
+      fontWeight: "900",
+    },
+
+    locationError: {
+      color: COLORS.red,
+      fontSize: 11,
+      lineHeight: 16,
+      marginTop: 8,
+      paddingHorizontal: 3,
+    },
+
+    // ========================================================
+    // WELCOME
+    // ========================================================
+
+    welcomeSection: {
+      marginBottom: 17,
+    },
+
+    welcomeTitle: {
+      fontSize: 27,
+      fontWeight: "900",
+      letterSpacing: -0.8,
+    },
+
+    welcomeSubtitle: {
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 5,
+    },
+
+    // ========================================================
+    // SEARCH
+    // ========================================================
+
+    searchContainer: {
+      height: 57,
+      borderRadius: 18,
+      flexDirection: "row",
+      alignItems: "center",
+      paddingLeft: 8,
+      paddingRight: 7,
+      marginBottom: 29,
+      borderWidth: 1,
+      elevation: 2,
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.04,
+      shadowRadius: 5,
+    },
+
+    searchIconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      backgroundColor:
+        COLORS.lightOrange,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    searchInputFake: {
+      flex: 1,
+      marginHorizontal: 9,
+      fontSize: 13,
+      fontWeight: "500",
+    },
+
+    searchFilterButton: {
+      width: 41,
+      height: 41,
+      borderRadius: 14,
+      backgroundColor:
+        COLORS.orange,
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    // ========================================================
     // SECTION
-    // ==========================================================
+    // ========================================================
 
     sectionHeader: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-end",
       justifyContent:
         "space-between",
-      marginBottom: 13,
-      marginTop: 4,
+      marginBottom: 14,
+    },
+
+    sectionHeaderLeft: {
+      flex: 1,
+      paddingRight: 10,
     },
 
     sectionTitle: {
       fontSize: 19,
-      fontWeight: "800",
+      fontWeight: "900",
+      letterSpacing: -0.3,
     },
 
     sectionSubtitle: {
-      marginTop: 3,
-      fontSize: 12,
+      fontSize: 11,
+      marginTop: 4,
     },
 
     seeAll: {
       color: COLORS.orange,
-      fontSize: 13,
-      fontWeight: "700",
+      fontSize: 12,
+      fontWeight: "800",
+      paddingBottom: 2,
     },
 
-    // ==========================================================
-    // HORIZONTAL FOOD
-    // ==========================================================
+    // ========================================================
+    // HORIZONTAL LIST
+    // ========================================================
 
     horizontalList: {
-      paddingBottom: 7,
       paddingRight: 5,
+      paddingBottom: 4,
     },
 
-    horizontalCard: {
-      width: 155,
-      borderRadius: 18,
-      padding: 9,
-      marginRight: 13,
-      borderWidth: 1,
-    },
-
-    horizontalImageContainer: {
-      width: "100%",
-      height: 120,
-      borderRadius: 14,
-      overflow: "hidden",
-      position: "relative",
-    },
-
-    horizontalImage: {
-      width: "100%",
-      height: "100%",
-    },
-
-    horizontalNoImage: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent:
-        "center",
-      backgroundColor:
-        COLORS.lightOrange,
-    },
-
-    smallRating: {
-      position: "absolute",
-      top: 7,
-      right: 7,
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor:
-        COLORS.white,
-      borderRadius: 10,
-      paddingHorizontal: 6,
-      paddingVertical: 3,
-    },
-
-    smallRatingText: {
-      marginLeft: 3,
-      fontSize: 9,
-      fontWeight: "700",
-      color: COLORS.dark,
-    },
-
-    horizontalName: {
-      marginTop: 9,
-      fontSize: 14,
-      fontWeight: "700",
-    },
-
-    horizontalPrice: {
-      marginTop: 5,
-      color: COLORS.orange,
-      fontSize: 15,
-      fontWeight: "800",
-    },
-
-    // ==========================================================
-    // FOOD GRID
-    // ==========================================================
-
-    foodGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      justifyContent:
-        "space-between",
-    },
+    // ========================================================
+    // FOOD CARD
+    // ========================================================
 
     foodCard: {
-      width: "48.3%",
-      borderRadius: 18,
-      overflow: "hidden",
-      marginBottom: 15,
+      width: 190,
+      borderRadius: 22,
+      marginRight: 14,
+      padding: 8,
       borderWidth: 1,
+      overflow: "hidden",
     },
 
-    foodImageContainer: {
+    foodImageWrapper: {
       width: "100%",
-      height: 145,
+      height: 143,
+      borderRadius: 17,
+      overflow: "hidden",
       position: "relative",
     },
 
@@ -3006,8 +3197,6 @@ const styles =
 
     noImage: {
       flex: 1,
-      backgroundColor:
-        COLORS.lightOrange,
       alignItems: "center",
       justifyContent:
         "center",
@@ -3015,64 +3204,87 @@ const styles =
 
     ratingBadge: {
       position: "absolute",
-      right: 8,
-      top: 8,
+      top: 9,
+      right: 9,
+      minHeight: 25,
+      borderRadius: 13,
       backgroundColor:
         COLORS.white,
-      borderRadius: 12,
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 7,
-      paddingVertical: 4,
+      paddingHorizontal: 8,
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.12,
+      shadowRadius: 4,
+      elevation: 2,
     },
 
     ratingText: {
       marginLeft: 3,
       fontSize: 10,
-      fontWeight: "700",
+      fontWeight: "800",
       color: COLORS.dark,
     },
 
+    distanceBadge: {
+      position: "absolute",
+      bottom: 9,
+      left: 9,
+      minHeight: 25,
+      borderRadius: 13,
+      backgroundColor:
+        "rgba(15,14,13,0.75)",
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 8,
+    },
+
+    distanceBadgeText: {
+      marginLeft: 3,
+      color: COLORS.white,
+      fontSize: 9,
+      fontWeight: "700",
+    },
+
     foodDetails: {
-      padding: 10,
+      paddingHorizontal: 3,
+      paddingTop: 10,
+      paddingBottom: 3,
     },
 
     foodName: {
       fontSize: 15,
       fontWeight: "800",
+      letterSpacing: -0.2,
     },
 
     foodDescription: {
-      fontSize: 11,
-      lineHeight: 16,
+      fontSize: 10,
       marginTop: 4,
-      minHeight: 32,
     },
 
-    foodBottom: {
+    foodFooter: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent:
         "space-between",
-      marginTop: 9,
+      marginTop: 10,
     },
 
-    price: {
-      fontSize: 16,
-      fontWeight: "800",
+    foodPrice: {
       color: COLORS.orange,
+      fontSize: 17,
+      fontWeight: "900",
     },
 
-    distanceText: {
-      marginTop: 2,
-      fontSize: 9,
-      fontWeight: "500",
-    },
-
-    arrowButton: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
+    viewButton: {
+      width: 31,
+      height: 31,
+      borderRadius: 16,
       backgroundColor:
         COLORS.orange,
       alignItems: "center",
@@ -3080,50 +3292,85 @@ const styles =
         "center",
     },
 
-    // ==========================================================
+    // ========================================================
     // EMPTY
-    // ==========================================================
+    // ========================================================
 
-    empty: {
-      minHeight: 100,
-      borderRadius: 16,
+    emptyCard: {
+      minHeight: 92,
+      borderRadius: 18,
       borderWidth: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+    },
+
+    emptyIcon: {
+      width: 50,
+      height: 50,
+      borderRadius: 16,
       alignItems: "center",
       justifyContent:
         "center",
-      marginBottom: 22,
-      paddingHorizontal: 20,
+    },
+
+    emptyContent: {
+      flex: 1,
+      marginLeft: 12,
+    },
+
+    emptyTitle: {
+      fontSize: 13,
+      fontWeight: "800",
     },
 
     emptyText: {
-      marginTop: 7,
-      fontSize: 12,
-      textAlign: "center",
+      fontSize: 10,
+      lineHeight: 15,
+      marginTop: 3,
     },
 
-    // ==========================================================
+    // ========================================================
     // LOADING
-    // ==========================================================
+    // ========================================================
 
     loadingContainer: {
       flex: 1,
       alignItems: "center",
       justifyContent:
         "center",
+      paddingHorizontal: 25,
+    },
+
+    loadingLogo: {
+      width: 76,
+      height: 76,
+      borderRadius: 24,
+      alignItems: "center",
+      justifyContent:
+        "center",
     },
 
     loadingText: {
-      marginTop: 12,
-      fontSize: 14,
-      fontWeight: "600",
+      marginTop: 14,
+      fontSize: 15,
+      fontWeight: "800",
+      textAlign: "center",
     },
 
-    // ==========================================================
+    loadingSubText: {
+      marginTop: 5,
+      fontSize: 11,
+      textAlign: "center",
+    },
+
+    // ========================================================
     // BOTTOM
-    // ==========================================================
+    // ========================================================
 
     bottomSpace: {
-      height: 30,
+      height: 35,
     },
   });
 

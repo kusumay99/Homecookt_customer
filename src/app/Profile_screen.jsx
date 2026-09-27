@@ -277,29 +277,29 @@ export default function ProfileScreen() {
         totalOrders:
           Number(
             orderStats.total_orders ??
-              orderStats.totalOrders ??
-              0
+            orderStats.totalOrders ??
+            0
           ) || 0,
 
         completedOrders:
           Number(
             orderStats.completed_orders ??
-              orderStats.completedOrders ??
-              0
+            orderStats.completedOrders ??
+            0
           ) || 0,
 
         cancelledOrders:
           Number(
             orderStats.cancelled_orders ??
-              orderStats.cancelledOrders ??
-              0
+            orderStats.cancelledOrders ??
+            0
           ) || 0,
 
         totalSpent:
           Number(
             orderStats.total_spent ??
-              orderStats.totalSpent ??
-              0
+            orderStats.totalSpent ??
+            0
           ) || 0,
       },
     };
@@ -366,8 +366,8 @@ export default function ProfileScreen() {
         if (!response.ok) {
           throw new Error(
             decoded?.message ||
-              decoded?.error ||
-              `Failed to load profile (${response.status})`
+            decoded?.error ||
+            `Failed to load profile (${response.status})`
           );
         }
 
@@ -388,7 +388,7 @@ export default function ProfileScreen() {
 
         setError(
           requestError?.message ||
-            "Unable to load profile."
+          "Unable to load profile."
         );
       } finally {
         setProfileLoading(false);
@@ -458,73 +458,98 @@ export default function ProfileScreen() {
 
       const token = await getStoredToken();
 
+      console.log("========== DELETE ACCOUNT ==========");
+
       if (!token) {
+        console.log("DELETE ERROR: No access token found");
+
         await clearAuthStorage();
         goToLogin();
         return;
       }
+
+      // Get user ID from profile first
+      // If not available, try AsyncStorage
+      const storedUserId =
+        (await AsyncStorage.getItem("user_id")) ||
+        (await AsyncStorage.getItem("userid")) ||
+        (await AsyncStorage.getItem("userId"));
 
       const userId =
         user?.id ||
         user?.user_id ||
-        user?._id;
+        user?._id ||
+        storedUserId;
+
+      console.log("DELETE USER OBJECT:", user);
+      console.log("DELETE USER ID:", userId);
 
       if (!userId) {
         Alert.alert(
           "Unable to Delete",
-          "User ID was not found. Please login again."
+          "User ID was not found. Please logout and login again."
         );
         return;
       }
 
-      const response = await fetch(
-        `${BASE_URL}/api/v1/users/deleteuser/${userId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const deleteUrl =
+        `${BASE_URL}/api/v1/users/deleteuser`;
+
+      console.log("DELETE URL:", deleteUrl);
+
+      const response = await fetch(deleteUrl, {
+        method: "DELETE",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       const rawText = await response.text();
+
+      console.log("DELETE STATUS:", response.status);
+      console.log("DELETE RESPONSE:", rawText);
 
       let decoded = null;
 
       try {
-        decoded = rawText
-          ? JSON.parse(rawText)
-          : null;
+        decoded = rawText ? JSON.parse(rawText) : null;
       } catch (parseError) {
-        console.log(
-          "DELETE RESPONSE PARSE ERROR:",
-          parseError
-        );
+        console.log("DELETE JSON PARSE ERROR:", parseError);
       }
 
-      if (
-        response.status === 401 ||
-        response.status === 403
-      ) {
-        await clearAuthStorage();
-        goToLogin();
+      // Unauthorized
+      if (response.status === 401 || response.status === 403) {
+        Alert.alert(
+          "Session Expired",
+          "Your session has expired. Please login again.",
+          [
+            {
+              text: "OK",
+              onPress: async () => {
+                await clearAuthStorage();
+                goToLogin();
+              },
+            },
+          ]
+        );
+
         return;
       }
 
-      if (
-        response.status !== 200 &&
-        response.status !== 201 &&
-        response.status !== 202 &&
-        response.status !== 204
-      ) {
+      // Any HTTP 2xx response = success
+      if (!response.ok) {
         throw new Error(
           decoded?.message ||
-            decoded?.error ||
-            "Failed to delete account."
+          decoded?.error ||
+          rawText ||
+          `Delete account failed (${response.status})`
         );
       }
 
+      console.log("ACCOUNT DELETE SUCCESS");
+
+      // Clear local login/session data
       await clearAuthStorage();
 
       Alert.alert(
@@ -540,15 +565,12 @@ export default function ProfileScreen() {
         ]
       );
     } catch (deleteError) {
-      console.log(
-        "DELETE ACCOUNT ERROR:",
-        deleteError
-      );
+      console.log("DELETE ACCOUNT ERROR:", deleteError);
 
       Alert.alert(
         "Delete Failed",
         deleteError?.message ||
-          "Unable to delete your account. Please try again."
+        "Unable to delete your account. Please try again."
       );
     } finally {
       setDeleting(false);

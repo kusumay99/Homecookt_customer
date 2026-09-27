@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   ActivityIndicator,
   Alert,
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -19,12 +19,12 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { router, useLocalSearchParams } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import DateTimePicker from "@react-native-community/datetimepicker";
 
@@ -32,133 +32,188 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { LinearGradient } from "expo-linear-gradient";
 
+// ============================================================
+// EXPO 57 FILE UPLOAD
+// ============================================================
+
+import { File } from "expo-file-system";
+import { fetch as expoFetch } from "expo/fetch";
+
+// IMPORTANT:
+// Use the same theme/app provider used by SettingsScreen.
+import { useApp } from "./_layout";
+
 const BASE_URL = "https://api.homecookt.com";
 
-const UpdateProfileScreen = () => {
-  // ============================================================
-  // EXPO ROUTER PARAMS
-  // ============================================================
+const GENDER_OPTIONS = [
+  {
+    label: "Male",
+    value: "male",
+    icon: "male-outline",
+  },
+  {
+    label: "Female",
+    value: "female",
+    icon: "female-outline",
+  },
+  {
+    label: "Other",
+    value: "other",
+    icon: "person-outline",
+  },
+];
 
-  const params = useLocalSearchParams();
+// ============================================================
+// DATE HELPERS
+// ============================================================
 
-  const rawUser = Array.isArray(params?.user)
-    ? params.user[0]
-    : params?.user;
+function formatDateForApi(date) {
+  if (!date) return "";
 
-  let passedUser = {};
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
 
-  try {
-    passedUser = rawUser ? JSON.parse(rawUser) : {};
-  } catch (error) {
-    console.log("USER PARAM PARSE ERROR =>", error);
-    passedUser = {};
+  return `${day}-${month}-${year}`;
+}
+
+function parseDateString(value) {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return value;
   }
 
-  console.log("UPDATE PROFILE USER =>", passedUser);
+  const text = String(value).trim();
+
+  const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})$/;
+  const yyyymmdd = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+  let day;
+  let month;
+  let year;
+
+  if (ddmmyyyy.test(text)) {
+    const match = text.match(ddmmyyyy);
+
+    day = Number(match[1]);
+    month = Number(match[2]);
+    year = Number(match[3]);
+  } else if (yyyymmdd.test(text)) {
+    const match = text.match(yyyymmdd);
+
+    year = Number(match[1]);
+    month = Number(match[2]);
+    day = Number(match[3]);
+  } else {
+    const parsed = new Date(text);
+
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+
+    return null;
+  }
+
+  const result = new Date(year, month - 1, day);
+
+  if (Number.isNaN(result.getTime())) {
+    return null;
+  }
+
+  return result;
+}
+
+// ============================================================
+// MAIN SCREEN
+// ============================================================
+
+export default function UpdateProfileScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+
+  // ============================================================
+  // THEME
+  // ============================================================
+
+  const { isDarkMode, colors } = useApp();
+
+  const styles = useMemo(
+    () => createStyles(colors, isDarkMode),
+    [colors, isDarkMode]
+  );
+
+  // ============================================================
+  // USER PARAM
+  // ============================================================
+
+  const initialUser = useMemo(() => {
+    try {
+      if (!params?.user) {
+        return {};
+      }
+
+      if (typeof params.user === "string") {
+        return JSON.parse(params.user);
+      }
+
+      if (Array.isArray(params.user) && params.user.length > 0) {
+        return JSON.parse(params.user[0]);
+      }
+
+      return {};
+    } catch (error) {
+      console.log("FAILED TO PARSE USER PARAMETER:", error);
+      return {};
+    }
+  }, [params]);
 
   // ============================================================
   // FORM STATE
   // ============================================================
 
-  const [name, setName] = useState(
-    passedUser?.name?.toString() || ""
-  );
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [gender, setGender] = useState("");
+  const [dob, setDob] = useState("");
+  const [bio, setBio] = useState("");
 
-  const [phone, setPhone] = useState(
-    passedUser?.phone_number?.toString() ||
-      passedUser?.phone?.toString() ||
-      ""
-  );
+  const [country, setCountry] = useState("");
+  const [state, setState] = useState("");
+  const [city, setCity] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [address, setAddress] = useState("");
 
-  const [gender, setGender] = useState(
-    passedUser?.gender?.toString() || ""
-  );
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
 
-  const [dob, setDob] = useState(
-    passedUser?.dob?.toString() || ""
-  );
-
-  const [bio, setBio] = useState(
-    passedUser?.bio?.toString() || ""
-  );
-
-  const [country, setCountry] = useState(
-    passedUser?.country?.toString() || ""
-  );
-
-  const [state, setState] = useState(
-    passedUser?.state?.toString() || ""
-  );
-
-  const [city, setCity] = useState(
-    passedUser?.city?.toString() || ""
-  );
-
-  const [pincode, setPincode] = useState(
-    passedUser?.pincode?.toString() ||
-      passedUser?.postal_code?.toString() ||
-      ""
-  );
-
-  const [address, setAddress] = useState(
-    passedUser?.address?.toString() || ""
-  );
-
-  const [latitude, setLatitude] = useState(
-    passedUser?.latitude?.toString() || ""
-  );
-
-  const [longitude, setLongitude] = useState(
-    passedUser?.longitude?.toString() || ""
-  );
-
-  const [foodPreferences, setFoodPreferences] =
-    useState(
-      passedUser?.food_preferences?.toString() || ""
-    );
-
-  const [dietaryPreference, setDietaryPreference] =
-    useState(
-      passedUser?.dietary_preference?.toString() || ""
-    );
-
-  const [favoriteCuisine, setFavoriteCuisine] =
-    useState(
-      passedUser?.favorite_cuisine?.toString() || ""
-    );
+  const [foodPreferences, setFoodPreferences] = useState("");
+  const [dietaryPreference, setDietaryPreference] = useState("");
+  const [favoriteCuisine, setFavoriteCuisine] = useState("");
 
   // ============================================================
-  // PROFILE IMAGE
+  // IMAGE
   // ============================================================
 
   const [profileImage, setProfileImage] = useState(null);
-
-  const [existingProfileImage, setExistingProfileImage] =
-    useState(
-      passedUser?.profile_photo ||
-        passedUser?.profile_image ||
-        passedUser?.image ||
-        passedUser?.image_url ||
-        ""
-    );
+  const [existingProfileImage, setExistingProfileImage] = useState("");
 
   // ============================================================
-  // UI STATE
+  // LOADING
   // ============================================================
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
-  const [isProfileLoading, setIsProfileLoading] =
-    useState(true);
+  // ============================================================
+  // MODALS
+  // ============================================================
 
-  const [showGenderModal, setShowGenderModal] =
-    useState(false);
+  const [genderModalVisible, setGenderModalVisible] = useState(false);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
 
-  const [showDatePicker, setShowDatePicker] =
-    useState(false);
-
-  const [selectedDate, setSelectedDate] =
-    useState(new Date(2000, 0, 1));
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   // ============================================================
   // TOKEN
@@ -166,117 +221,185 @@ const UpdateProfileScreen = () => {
 
   const getToken = async () => {
     try {
-      const accessToken =
-        await AsyncStorage.getItem("access_token");
+      const accessToken = await AsyncStorage.getItem("access_token");
 
       if (accessToken) {
-        console.log("UPDATE PROFILE TOKEN => available");
         return accessToken;
       }
 
-      // Compatibility with older storage
-      const accessToken2 =
+      const accessTokenFallback =
         await AsyncStorage.getItem("accessToken");
 
-      if (accessToken2) {
-        return accessToken2;
+      if (accessTokenFallback) {
+        return accessTokenFallback;
       }
 
-      const token =
-        await AsyncStorage.getItem("token");
+      const token = await AsyncStorage.getItem("token");
 
-      return token || "";
+      return token;
     } catch (error) {
-      console.log("TOKEN ERROR =>", error);
-      return "";
+      console.log("FAILED TO GET TOKEN:", error);
+      return null;
     }
   };
 
   // ============================================================
-  // IMAGE URL
+  // LOAD INITIAL DATA
   // ============================================================
 
-  const getImageUrl = (image) => {
-    if (!image || typeof image !== "string") {
-      return "";
-    }
+  useEffect(() => {
+    initializeProfile();
+  }, []);
 
-    const cleanImage = image.trim();
-
-    if (!cleanImage) {
-      return "";
-    }
-
-    if (
-      cleanImage.startsWith("http://") ||
-      cleanImage.startsWith("https://")
-    ) {
-      return cleanImage;
-    }
-
-    const cleanPath = cleanImage.replace(/^\/+/, "");
-
-    return `${BASE_URL}/${cleanPath}`;
-  };
-
-  // ============================================================
-  // GET PROFILE
-  // ============================================================
-
-  const getProfile = async () => {
+  const initializeProfile = async () => {
     try {
-      setIsProfileLoading(true);
+      setLoading(true);
 
+      // --------------------------------------------------------
+      // ROUTE PARAMS
+      // --------------------------------------------------------
+
+      setName(initialUser?.name || "");
+
+      setPhone(
+        initialUser?.phone_number ||
+          initialUser?.phone ||
+          initialUser?.phoneNumber ||
+          ""
+      );
+
+      setGender(initialUser?.gender || "");
+
+      const initialDob =
+        initialUser?.dob ||
+        initialUser?.date_of_birth ||
+        initialUser?.dateOfBirth ||
+        "";
+
+      setDob(initialDob || "");
+
+      setBio(initialUser?.bio || "");
+
+      setCountry(initialUser?.country || "");
+      setState(initialUser?.state || "");
+      setCity(initialUser?.city || "");
+      setPincode(initialUser?.pincode || "");
+      setAddress(initialUser?.address || "");
+
+      setLatitude(
+        initialUser?.latitude !== undefined &&
+          initialUser?.latitude !== null
+          ? String(initialUser.latitude)
+          : ""
+      );
+
+      setLongitude(
+        initialUser?.longitude !== undefined &&
+          initialUser?.longitude !== null
+          ? String(initialUser.longitude)
+          : ""
+      );
+
+      setFoodPreferences(
+        initialUser?.food_preferences ||
+          initialUser?.foodPreferences ||
+          ""
+      );
+
+      setDietaryPreference(
+        initialUser?.dietary_preference ||
+          initialUser?.dietaryPreference ||
+          ""
+      );
+
+      setFavoriteCuisine(
+        initialUser?.favorite_cuisine ||
+          initialUser?.favoriteCuisine ||
+          ""
+      );
+
+      const initialImage =
+        initialUser?.profile_photo ||
+        initialUser?.profile_image ||
+        initialUser?.profileImage ||
+        initialUser?.image ||
+        "";
+
+      if (initialImage) {
+        setExistingProfileImage(initialImage);
+      }
+
+      // --------------------------------------------------------
+      // FETCH LATEST PROFILE
+      // --------------------------------------------------------
+
+      await fetchProfile();
+    } catch (error) {
+      console.log("INITIALIZE PROFILE ERROR:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============================================================
+  // FETCH PROFILE
+  // ============================================================
+
+  const fetchProfile = async () => {
+    let timeout;
+
+    try {
       const token = await getToken();
 
       if (!token) {
-        console.log("NO ACCESS TOKEN FOUND");
-
-        setIsProfileLoading(false);
-
+        setLoading(false);
+        router.replace("/Login");
         return;
       }
+
+      const controller = new AbortController();
+
+      timeout = setTimeout(() => {
+        controller.abort();
+      }, 20000);
 
       const response = await fetch(
         `${BASE_URL}/api/v1/users/profile`,
         {
           method: "GET",
+
           headers: {
-            Accept: "application/json",
             Authorization: `Bearer ${token}`,
+            Accept: "application/json",
           },
+
+          signal: controller.signal,
         }
       );
+
+      clearTimeout(timeout);
+      timeout = null;
+
+      console.log("PROFILE GET STATUS:", response.status);
 
       const responseText = await response.text();
 
       console.log(
-        "GET PROFILE STATUS =>",
-        response.status
-      );
-
-      console.log(
-        "GET PROFILE BODY =>",
+        "PROFILE GET RESPONSE:",
         responseText
       );
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          Alert.alert(
-            "Session Expired",
-            "Please login again.",
-            [
-              {
-                text: "OK",
-                onPress: async () => {
-                  await AsyncStorage.clear();
-                  router.replace("/Login");
-                },
-              },
-            ]
-          );
-        }
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        await AsyncStorage.multiRemove([
+          "access_token",
+          "accessToken",
+          "token",
+        ]);
 
+        router.replace("/Login");
         return;
       }
 
@@ -288,147 +411,114 @@ const UpdateProfileScreen = () => {
           : {};
       } catch (error) {
         console.log(
-          "PROFILE JSON ERROR =>",
+          "PROFILE RESPONSE JSON PARSE ERROR:",
           error
         );
+      }
 
+      if (!response.ok) {
+        console.log(
+          "PROFILE API ERROR:",
+          response.status,
+          data
+        );
         return;
       }
 
-      /*
-        Backend can return:
-
-        {
-          data: {...}
-        }
-
-        OR
-
-        {
-          profile: {...}
-        }
-
-        OR directly:
-        {...}
-      */
-
-      const user =
+      const profile =
         data?.profile ||
         data?.data ||
         data?.user ||
-        data;
+        data ||
+        {};
 
-      if (!user || typeof user !== "object") {
-        console.log(
-          "INVALID PROFILE RESPONSE =>",
-          data
-        );
-
-        return;
-      }
-
-      setName(
-        user?.name?.toString() || ""
-      );
+      setName(profile?.name || "");
 
       setPhone(
-        user?.phone_number?.toString() ||
-          user?.phone?.toString() ||
+        profile?.phone_number ||
+          profile?.phone ||
+          profile?.phoneNumber ||
           ""
       );
 
-      setGender(
-        user?.gender?.toString() || ""
-      );
+      setGender(profile?.gender || "");
 
-      setDob(
-        user?.dob?.toString() || ""
-      );
+      const profileDob =
+        profile?.dob ||
+        profile?.date_of_birth ||
+        profile?.dateOfBirth ||
+        "";
 
-      setBio(
-        user?.bio?.toString() || ""
-      );
+      setDob(profileDob || "");
 
-      setCountry(
-        user?.country?.toString() || ""
-      );
+      setBio(profile?.bio || "");
 
-      setState(
-        user?.state?.toString() || ""
-      );
-
-      setCity(
-        user?.city?.toString() || ""
-      );
-
-      setPincode(
-        user?.pincode?.toString() ||
-          user?.postal_code?.toString() ||
-          ""
-      );
-
-      setAddress(
-        user?.address?.toString() || ""
-      );
+      setCountry(profile?.country || "");
+      setState(profile?.state || "");
+      setCity(profile?.city || "");
+      setPincode(profile?.pincode || "");
+      setAddress(profile?.address || "");
 
       setLatitude(
-        user?.latitude?.toString() || ""
+        profile?.latitude !== undefined &&
+          profile?.latitude !== null
+          ? String(profile.latitude)
+          : ""
       );
 
       setLongitude(
-        user?.longitude?.toString() || ""
+        profile?.longitude !== undefined &&
+          profile?.longitude !== null
+          ? String(profile.longitude)
+          : ""
       );
 
       setFoodPreferences(
-        user?.food_preferences?.toString() || ""
-      );
-
-      setDietaryPreference(
-        user?.dietary_preference?.toString() || ""
-      );
-
-      setFavoriteCuisine(
-        user?.favorite_cuisine?.toString() || ""
-      );
-
-      setExistingProfileImage(
-        user?.profile_photo ||
-          user?.profile_image ||
-          user?.image ||
-          user?.image_url ||
+        profile?.food_preferences ||
+          profile?.foodPreferences ||
           ""
       );
 
-      console.log(
-        "PROFILE LOADED SUCCESSFULLY"
+      setDietaryPreference(
+        profile?.dietary_preference ||
+          profile?.dietaryPreference ||
+          ""
       );
+
+      setFavoriteCuisine(
+        profile?.favorite_cuisine ||
+          profile?.favoriteCuisine ||
+          ""
+      );
+
+      const image =
+        profile?.profile_photo ||
+        profile?.profile_image ||
+        profile?.profileImage ||
+        profile?.image ||
+        "";
+
+      if (image) {
+        setExistingProfileImage(image);
+      }
     } catch (error) {
-      console.log(
-        "GET PROFILE ERROR =>",
-        error
-      );
+      if (error?.name === "AbortError") {
+        console.log("PROFILE REQUEST TIMED OUT");
+      } else {
+        console.log("FETCH PROFILE ERROR:", error);
+      }
     } finally {
-      setIsProfileLoading(false);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     }
   };
 
   // ============================================================
-  // INITIAL LOAD
+  // IMAGE PICKER
   // ============================================================
 
-  useEffect(() => {
-    getProfile();
-
-    // We intentionally do not automatically
-    // overwrite saved address/location here.
-    // User can press "Use Current".
-  }, []);
-
-  // ============================================================
-  // PICK PROFILE IMAGE
-  // ============================================================
-
-  const pickImage = async () => {
+  const pickProfileImage = async () => {
     try {
       const permission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -438,7 +528,6 @@ const UpdateProfileScreen = () => {
           "Permission Required",
           "Please allow photo library access to select a profile photo."
         );
-
         return;
       }
 
@@ -457,25 +546,56 @@ const UpdateProfileScreen = () => {
       const asset = result.assets?.[0];
 
       if (!asset?.uri) {
+        Alert.alert(
+          "Image Error",
+          "The selected image could not be loaded."
+        );
         return;
       }
 
-      console.log(
-        "SELECTED PROFILE IMAGE =>",
-        asset
-      );
+      console.log("SELECTED IMAGE:", asset);
 
       setProfileImage(asset);
     } catch (error) {
-      console.log(
-        "IMAGE PICK ERROR =>",
-        error
-      );
+      console.log("IMAGE PICKER ERROR:", error);
 
       Alert.alert(
         "Error",
-        "Unable to select profile image."
+        "Unable to select the profile photo."
       );
+    }
+  };
+
+  // ============================================================
+  // DATE PICKER
+  // ============================================================
+
+  const openDatePicker = () => {
+    const parsedDate = parseDateString(dob);
+
+    if (parsedDate) {
+      setSelectedDate(parsedDate);
+    } else {
+      setSelectedDate(new Date());
+    }
+
+    setDatePickerVisible(true);
+  };
+
+  const handleDateChange = (event, date) => {
+    if (Platform.OS === "android") {
+      setDatePickerVisible(false);
+    }
+
+    if (!date) {
+      return;
+    }
+
+    setSelectedDate(date);
+    setDob(formatDateForApi(date));
+
+    if (Platform.OS === "ios") {
+      setDatePickerVisible(false);
     }
   };
 
@@ -485,299 +605,116 @@ const UpdateProfileScreen = () => {
 
   const getCurrentLocation = async () => {
     try {
-      Keyboard.dismiss();
+      setGettingLocation(true);
 
-      const enabled =
+      console.log("GETTING CURRENT LOCATION...");
+
+      const servicesEnabled =
         await Location.hasServicesEnabledAsync();
 
-      if (!enabled) {
+      if (!servicesEnabled) {
         Alert.alert(
-          "Location Disabled",
-          "Please enable location services on your device."
+          "Location Services Disabled",
+          "Please enable location services on your device and try again."
         );
-
         return;
       }
 
       const permission =
         await Location.requestForegroundPermissionsAsync();
 
-      if (
-        permission.status !==
-        Location.PermissionStatus.GRANTED
-      ) {
+      if (permission.status !== "granted") {
         Alert.alert(
-          "Permission Required",
+          "Location Permission Required",
           "Please allow location permission to use your current location."
         );
-
         return;
       }
 
-      const position =
+      const location =
         await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
         });
 
-      const lat =
-        position.coords.latitude;
+      const lat = location.coords.latitude;
+      const lng = location.coords.longitude;
 
-      const lng =
-        position.coords.longitude;
-
-      console.log(
-        "CURRENT LATITUDE =>",
-        lat
-      );
-
-      console.log(
-        "CURRENT LONGITUDE =>",
-        lng
-      );
+      console.log("CURRENT LATITUDE:", lat);
+      console.log("CURRENT LONGITUDE:", lng);
 
       setLatitude(String(lat));
       setLongitude(String(lng));
 
       try {
-        const places =
+        const addresses =
           await Location.reverseGeocodeAsync({
             latitude: lat,
             longitude: lng,
           });
 
-        if (
-          places &&
-          places.length > 0
-        ) {
-          const place = places[0];
-
-          console.log(
-            "CURRENT LOCATION DETAILS =>",
-            place
-          );
+        if (addresses?.length > 0) {
+          const result = addresses[0];
 
           setCountry(
-            place.country || ""
+            result.country ||
+              result.isoCountryCode ||
+              ""
           );
 
           setState(
-            place.region ||
-              place.subregion ||
+            result.region ||
+              result.district ||
               ""
           );
 
           setCity(
-            place.city ||
-              place.district ||
-              place.subregion ||
+            result.city ||
+              result.subregion ||
+              result.district ||
               ""
           );
 
           setPincode(
-            place.postalCode || ""
+            result.postalCode ||
+              ""
           );
 
-          const parts = [];
+          const parts = [
+            result.name,
+            result.street,
+            result.subregion,
+          ].filter(Boolean);
 
-          if (place.name) {
-            parts.push(place.name);
-          }
-
-          if (place.street) {
-            parts.push(place.street);
-          }
-
-          if (
-            place.city ||
-            place.district
-          ) {
-            parts.push(
-              place.city ||
-                place.district
-            );
-          }
-
-          if (place.region) {
-            parts.push(place.region);
-          }
-
-          if (place.postalCode) {
-            parts.push(
-              place.postalCode
-            );
-          }
-
-          const generatedAddress =
-            parts
-              .filter(Boolean)
-              .filter(
-                (value, index, array) =>
-                  array.indexOf(value) === index
-              )
-              .join(", ");
-
-          if (generatedAddress) {
-            setAddress(
-              generatedAddress
-            );
-          }
+          setAddress(
+            parts.length > 0
+              ? [...new Set(parts)].join(", ")
+              : ""
+          );
         }
       } catch (error) {
         console.log(
-          "REVERSE GEOCODING ERROR =>",
+          "REVERSE GEOCODING ERROR:",
           error
         );
-
-        Alert.alert(
-          "Location",
-          "Coordinates were detected, but address details could not be retrieved."
-        );
       }
+
+      Alert.alert(
+        "Location Updated",
+        "Your current location has been added to the profile."
+      );
     } catch (error) {
       console.log(
-        "LOCATION ERROR =>",
+        "CURRENT LOCATION ERROR:",
         error
       );
 
       Alert.alert(
         "Location Error",
-        error?.message ||
-          "Unable to get your current location."
+        "Unable to get your current location. Please try again."
       );
+    } finally {
+      setGettingLocation(false);
     }
-  };
-
-  // ============================================================
-  // FORMAT DOB
-  // ============================================================
-
-  const formatDate = (date) => {
-    const day = String(
-      date.getDate()
-    ).padStart(2, "0");
-
-    const month = String(
-      date.getMonth() + 1
-    ).padStart(2, "0");
-
-    const year =
-      date.getFullYear();
-
-    return `${day}-${month}-${year}`;
-  };
-
-  // ============================================================
-  // PARSE DOB
-  // ============================================================
-
-  const parseDob = (value) => {
-    if (!value) {
-      return null;
-    }
-
-    const text = String(value).trim();
-
-    // DD-MM-YYYY
-    let match = text.match(
-      /^(\d{2})-(\d{2})-(\d{4})$/
-    );
-
-    if (match) {
-      const day = Number(match[1]);
-      const month =
-        Number(match[2]) - 1;
-      const year = Number(match[3]);
-
-      const date =
-        new Date(
-          year,
-          month,
-          day
-        );
-
-      if (
-        date.getFullYear() === year &&
-        date.getMonth() === month &&
-        date.getDate() === day
-      ) {
-        return date;
-      }
-    }
-
-    // YYYY-MM-DD
-    match = text.match(
-      /^(\d{4})-(\d{2})-(\d{2})$/
-    );
-
-    if (match) {
-      const year = Number(match[1]);
-      const month =
-        Number(match[2]) - 1;
-      const day = Number(match[3]);
-
-      const date =
-        new Date(
-          year,
-          month,
-          day
-        );
-
-      if (
-        date.getFullYear() === year &&
-        date.getMonth() === month &&
-        date.getDate() === day
-      ) {
-        return date;
-      }
-    }
-
-    return null;
-  };
-
-  // ============================================================
-  // OPEN DATE PICKER
-  // ============================================================
-
-  const openDatePicker = () => {
-    Keyboard.dismiss();
-
-    const parsedDate =
-      parseDob(dob);
-
-    const initialDate =
-      parsedDate ||
-      new Date(2000, 0, 1);
-
-    setSelectedDate(
-      initialDate
-    );
-
-    setShowDatePicker(true);
-  };
-
-  // ============================================================
-  // DATE CHANGE
-  // ============================================================
-
-  const onDateChange = (
-    event,
-    date
-  ) => {
-    if (
-      Platform.OS === "android"
-    ) {
-      setShowDatePicker(false);
-    }
-
-    if (!date) {
-      return;
-    }
-
-    setSelectedDate(date);
-
-    setDob(
-      formatDate(date)
-    );
   };
 
   // ============================================================
@@ -785,82 +722,42 @@ const UpdateProfileScreen = () => {
   // ============================================================
 
   const validateForm = () => {
-    if (!name.trim()) {
+    const trimmedName = String(name || "").trim();
+
+    if (!trimmedName) {
       Alert.alert(
-        "Validation",
-        "Name is required."
+        "Required",
+        "Please enter your name."
       );
 
       return false;
     }
 
-    if (!phone.trim()) {
+    const trimmedPhone =
+      String(phone || "").trim();
+
+    if (
+      trimmedPhone &&
+      trimmedPhone.length < 5
+    ) {
       Alert.alert(
-        "Validation",
-        "Phone Number is required."
+        "Invalid Phone",
+        "Please enter a valid phone number."
       );
 
       return false;
     }
 
-    if (!gender.trim()) {
+    const trimmedPincode =
+      String(pincode || "").trim();
+
+    if (
+      trimmedPincode &&
+      trimmedPincode.length < 3
+    ) {
       Alert.alert(
-        "Validation",
-        "Please select your gender."
-      );
-
-      return false;
-    }
-
-    if (!dob.trim()) {
-      Alert.alert(
-        "Validation",
-        "Date of Birth is required."
-      );
-
-      return false;
-    }
-
-    if (!country.trim()) {
-      Alert.alert(
-        "Validation",
-        "Country is required."
-      );
-
-      return false;
-    }
-
-    if (!state.trim()) {
-      Alert.alert(
-        "Validation",
-        "State is required."
-      );
-
-      return false;
-    }
-
-    if (!city.trim()) {
-      Alert.alert(
-        "Validation",
-        "City is required."
-      );
-
-      return false;
-    }
-
-    if (!pincode.trim()) {
-      Alert.alert(
-        "Validation",
-        "Pincode is required."
-      );
-
-      return false;
-    }
-
-    if (!address.trim()) {
-      Alert.alert(
-        "Validation",
-        "Address is required."
+        "Invalid Pincode",
+        "Please enter a valid pincode."
       );
 
       return false;
@@ -870,381 +767,279 @@ const UpdateProfileScreen = () => {
   };
 
   // ============================================================
-  // GET ERROR MESSAGE
+  // SAVE PROFILE
   // ============================================================
 
-  const getErrorMessage = (
-    responseText,
-    status
-  ) => {
-    let message =
-      `Failed to update profile (${status}).`;
-
-    if (!responseText) {
-      return message;
-    }
-
-    try {
-      const data =
-        JSON.parse(responseText);
-
-      if (
-        typeof data?.message ===
-        "string"
-      ) {
-        return data.message;
-      }
-
-      if (
-        typeof data?.detail ===
-        "string"
-      ) {
-        return data.detail;
-      }
-
-      if (
-        typeof data?.error ===
-        "string"
-      ) {
-        return data.error;
-      }
-
-      if (
-        Array.isArray(
-          data?.detail
-        )
-      ) {
-        return data.detail
-          .map((item) => {
-            if (
-              typeof item ===
-              "string"
-            ) {
-              return item;
-            }
-
-            return (
-              item?.msg ||
-              item?.message ||
-              "Invalid field"
-            );
-          })
-          .join("\n");
-      }
-
-      if (
-        Array.isArray(
-          data?.errors
-        )
-      ) {
-        return data.errors
-          .map((item) => {
-            if (
-              typeof item ===
-              "string"
-            ) {
-              return item;
-            }
-
-            return (
-              item?.msg ||
-              item?.message ||
-              "Invalid field"
-            );
-          })
-          .join("\n");
-      }
-
-      return message;
-    } catch (error) {
-      return responseText || message;
-    }
-  };
-
-  // ============================================================
-  // UPDATE PROFILE
-  // ============================================================
-
-  const updateProfile = async () => {
-    if (isLoading) {
+  const saveProfile = async () => {
+    if (saving) {
       return;
     }
-
-    Keyboard.dismiss();
 
     if (!validateForm()) {
       return;
     }
 
-    try {
-      setIsLoading(true);
+    let timeout;
 
-      const token =
-        await getToken();
+    try {
+      setSaving(true);
+
+      const token = await getToken();
 
       if (!token) {
-        Alert.alert(
-          "Authentication Error",
-          "Your session has expired. Please login again.",
-          [
-            {
-              text: "OK",
-              onPress: async () => {
-                await AsyncStorage.clear();
-                router.replace("/Login");
-              },
-            },
-          ]
-        );
-
+        router.replace("/Login");
         return;
       }
 
-      const formData =
-        new FormData();
+      console.log("========================================");
+      console.log("UPDATING PROFILE");
+      console.log("PROFILE IMAGE:", profileImage);
+      console.log("========================================");
 
       // ========================================================
-      // TEXT FIELDS
+      // CREATE FORM DATA
       // ========================================================
+
+      const formData = new FormData();
+
+      // --------------------------------------------------------
+      // NORMAL TEXT FIELDS
+      // --------------------------------------------------------
 
       formData.append(
         "name",
-        name.trim()
+        String(name || "").trim()
       );
 
       formData.append(
         "phone_number",
-        phone.trim()
+        String(phone || "").trim()
       );
 
       formData.append(
         "gender",
-        gender.trim()
+        String(gender || "")
       );
 
       formData.append(
         "dob",
-        dob.trim()
+        String(dob || "")
       );
 
       formData.append(
         "bio",
-        bio.trim()
+        String(bio || "").trim()
       );
 
       formData.append(
         "country",
-        country.trim()
+        String(country || "").trim()
       );
 
       formData.append(
         "state",
-        state.trim()
+        String(state || "").trim()
       );
 
       formData.append(
         "city",
-        city.trim()
+        String(city || "").trim()
       );
 
       formData.append(
         "pincode",
-        pincode.trim()
+        String(pincode || "").trim()
       );
 
       formData.append(
         "address",
-        address.trim()
+        String(address || "").trim()
       );
 
       formData.append(
         "latitude",
-        latitude.trim()
+        String(latitude ?? "")
       );
 
       formData.append(
         "longitude",
-        longitude.trim()
+        String(longitude ?? "")
       );
 
       formData.append(
         "food_preferences",
-        foodPreferences.trim()
+        String(foodPreferences || "").trim()
       );
 
       formData.append(
         "dietary_preference",
-        dietaryPreference.trim()
+        String(dietaryPreference || "").trim()
       );
 
       formData.append(
         "favorite_cuisine",
-        favoriteCuisine.trim()
+        String(favoriteCuisine || "").trim()
       );
 
       // ========================================================
-      // PROFILE PHOTO
+      // PROFILE IMAGE
       // ========================================================
 
       if (profileImage?.uri) {
-        const uri =
-          profileImage.uri;
-
-        const fileName =
-          profileImage.fileName ||
-          uri.split("/").pop() ||
-          `profile_${Date.now()}.jpg`;
-
-        let mimeType =
-          profileImage.mimeType;
-
-        if (!mimeType) {
-          const extension =
-            fileName
-              .split(".")
-              .pop()
-              ?.toLowerCase();
-
-          if (
-            extension === "png"
-          ) {
-            mimeType =
-              "image/png";
-          } else if (
-            extension === "webp"
-          ) {
-            mimeType =
-              "image/webp";
-          } else {
-            mimeType =
-              "image/jpeg";
-          }
-        }
-
-        formData.append(
-          "profile_photo",
-          {
-            uri,
-            name: fileName,
-            type: mimeType,
-          }
+        const imageUri = String(
+          profileImage.uri
         );
 
         console.log(
-          "PROFILE PHOTO ATTACHED =>",
-          {
-            uri,
-            name: fileName,
-            type: mimeType,
-          }
+          "PROFILE IMAGE URI:",
+          imageUri
+        );
+
+        // ------------------------------------------------------
+        // IMPORTANT FOR EXPO 57:
+        //
+        // DO NOT use:
+        //
+        // {
+        //   uri,
+        //   name,
+        //   type
+        // }
+        //
+        // Instead use expo-file-system File.
+        // ------------------------------------------------------
+
+        const imageFile = new File(
+          imageUri
+        );
+
+        console.log(
+          "EXPO FILE CREATED:",
+          imageFile
+        );
+
+        // Verify that the file actually exists.
+        const fileExists =
+          await imageFile.exists;
+
+        console.log(
+          "PROFILE IMAGE FILE EXISTS:",
+          fileExists
+        );
+
+        if (!fileExists) {
+          throw new Error(
+            "The selected profile image file no longer exists."
+          );
+        }
+
+        console.log(
+          "PROFILE IMAGE FILE SIZE:",
+          imageFile.size
+        );
+
+        console.log(
+          "PROFILE IMAGE FILE TYPE:",
+          imageFile.type
+        );
+
+        // ------------------------------------------------------
+        // THIS IS THE ONLY IMAGE FORM DATA PART.
+        // ------------------------------------------------------
+
+        formData.append(
+          "profile_photo",
+          imageFile
+        );
+
+        console.log(
+          "PROFILE PHOTO ADDED TO FORM DATA"
+        );
+      } else {
+        console.log(
+          "NO NEW PROFILE IMAGE SELECTED"
         );
       }
 
       console.log(
-        "UPDATING PROFILE..."
+        "PROFILE FORM DATA CREATED"
       );
+
+      // ========================================================
+      // API REQUEST
+      // ========================================================
 
       const controller =
         new AbortController();
 
-      const timeout =
-        setTimeout(() => {
-          controller.abort();
-        }, 30000);
+      timeout = setTimeout(() => {
+        controller.abort();
+      }, 30000);
 
-      let response;
+      console.log(
+        "SENDING PROFILE UPDATE REQUEST..."
+      );
 
-      try {
-        response = await fetch(
-          `${BASE_URL}/api/v1/users/profile`,
-          {
-            method: "PUT",
+      // IMPORTANT:
+      // Use Expo fetch for FormData + File.
+      const response = await expoFetch(
+        `${BASE_URL}/api/v1/users/profile`,
+        {
+          method: "PUT",
 
-            headers: {
-              Accept:
-                "application/json",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
 
-              Authorization:
-                `Bearer ${token}`,
-            },
+          // DO NOT manually set Content-Type.
+          body: formData,
 
-            /*
-              IMPORTANT:
+          signal: controller.signal,
+        }
+      );
 
-              Do NOT manually set:
+      clearTimeout(timeout);
+      timeout = null;
 
-              Content-Type:
-              multipart/form-data
+      console.log(
+        "UPDATE PROFILE STATUS:",
+        response.status
+      );
 
-              React Native must generate
-              the multipart boundary itself.
-            */
-
-            body: formData,
-
-            signal:
-              controller.signal,
-          }
-        );
-      } finally {
-        clearTimeout(timeout);
-      }
+      // ========================================================
+      // READ RESPONSE EXACTLY ONCE
+      // ========================================================
 
       const responseText =
         await response.text();
 
       console.log(
-        "UPDATE PROFILE STATUS =>",
-        response.status
-      );
-
-      console.log(
-        "UPDATE PROFILE BODY =>",
+        "UPDATE PROFILE RESPONSE:",
         responseText
       );
 
       // ========================================================
-      // SUCCESS
+      // SESSION EXPIRED
       // ========================================================
 
-      if (response.ok) {
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        await AsyncStorage.multiRemove([
+          "access_token",
+          "accessToken",
+          "token",
+        ]);
+
         Alert.alert(
-          "Success",
-          "Profile updated successfully.",
+          "Session Expired",
+          "Please login again.",
           [
             {
               text: "OK",
               onPress: () => {
-                /*
-                  Expo Router replacement for:
-
-                  navigation.goBack()
-                */
-
-                router.back();
-              },
-            },
-          ]
-        );
-
-        return;
-      }
-
-      // ========================================================
-      // UNAUTHORIZED
-      // ========================================================
-
-      if (
-        response.status === 401
-      ) {
-        Alert.alert(
-          "Session Expired",
-          "Your session has expired. Please login again.",
-          [
-            {
-              text: "OK",
-              onPress: async () => {
-                await AsyncStorage.clear();
                 router.replace("/Login");
               },
             },
@@ -1255,438 +1050,362 @@ const UpdateProfileScreen = () => {
       }
 
       // ========================================================
-      // ERROR
+      // PARSE RESPONSE
       // ========================================================
 
-      const errorMessage =
-        getErrorMessage(
-          responseText,
-          response.status
+      let responseData = {};
+
+      try {
+        responseData = responseText
+          ? JSON.parse(responseText)
+          : {};
+      } catch (error) {
+        console.log(
+          "UPDATE PROFILE RESPONSE IS NOT JSON"
+        );
+      }
+
+      // ========================================================
+      // API ERROR
+      // ========================================================
+
+      if (!response.ok) {
+        console.log(
+          "UPDATE PROFILE API ERROR:",
+          response.status,
+          responseData
         );
 
+        let errorMessage =
+          responseData?.detail ||
+          responseData?.message ||
+          responseData?.error ||
+          "";
+
+        // Handle FastAPI validation errors.
+        if (
+          !errorMessage &&
+          Array.isArray(responseData?.detail)
+        ) {
+          errorMessage =
+            responseData.detail
+              .map((item) => {
+                if (typeof item === "string") {
+                  return item;
+                }
+
+                return (
+                  item?.msg ||
+                  item?.message ||
+                  "Invalid profile data."
+                );
+              })
+              .join("\n");
+        }
+
+        if (!errorMessage) {
+          errorMessage =
+            responseText ||
+            "Unable to update your profile.";
+        }
+
+        Alert.alert(
+          "Update Failed",
+          String(errorMessage)
+        );
+
+        return;
+      }
+
+      // ========================================================
+      // GET UPDATED PROFILE FROM RESPONSE
+      // ========================================================
+
+      const returnedProfile =
+        responseData?.profile ||
+        responseData?.data ||
+        responseData?.user ||
+        null;
+
+      // ========================================================
+      // UPDATE LOCAL STORAGE
+      // ========================================================
+
+      try {
+        const storedUser =
+          await AsyncStorage.getItem(
+            "user"
+          );
+
+        let userObject = {};
+
+        if (storedUser) {
+          try {
+            userObject =
+              JSON.parse(storedUser);
+          } catch {
+            userObject = {};
+          }
+        }
+
+        const updatedUser = {
+          ...userObject,
+          ...initialUser,
+
+          name: String(
+            returnedProfile?.name ??
+              name ??
+              ""
+          ).trim(),
+
+          phone_number: String(
+            returnedProfile?.phone_number ??
+              phone ??
+              ""
+          ).trim(),
+
+          gender: String(
+            returnedProfile?.gender ??
+              gender ??
+              ""
+          ),
+
+          dob: String(
+            returnedProfile?.dob ??
+              dob ??
+              ""
+          ),
+
+          bio: String(
+            returnedProfile?.bio ??
+              bio ??
+              ""
+          ).trim(),
+
+          country: String(
+            returnedProfile?.country ??
+              country ??
+              ""
+          ).trim(),
+
+          state: String(
+            returnedProfile?.state ??
+              state ??
+              ""
+          ).trim(),
+
+          city: String(
+            returnedProfile?.city ??
+              city ??
+              ""
+          ).trim(),
+
+          pincode: String(
+            returnedProfile?.pincode ??
+              pincode ??
+              ""
+          ).trim(),
+
+          address: String(
+            returnedProfile?.address ??
+              address ??
+              ""
+          ).trim(),
+
+          latitude: String(
+            returnedProfile?.latitude ??
+              latitude ??
+              ""
+          ),
+
+          longitude: String(
+            returnedProfile?.longitude ??
+              longitude ??
+              ""
+          ),
+
+          food_preferences: String(
+            returnedProfile?.food_preferences ??
+              foodPreferences ??
+              ""
+          ).trim(),
+
+          dietary_preference: String(
+            returnedProfile?.dietary_preference ??
+              dietaryPreference ??
+              ""
+          ).trim(),
+
+          favorite_cuisine: String(
+            returnedProfile?.favorite_cuisine ??
+              favoriteCuisine ??
+              ""
+          ).trim(),
+        };
+
+        // ------------------------------------------------------
+        // IMPORTANT:
+        // If backend returned the uploaded image URL,
+        // keep that URL instead of the temporary local URI.
+        // ------------------------------------------------------
+
+        const returnedImage =
+          returnedProfile?.profile_photo ||
+          returnedProfile?.profile_image ||
+          returnedProfile?.profileImage ||
+          returnedProfile?.image ||
+          responseData?.profile_photo ||
+          responseData?.profile_image ||
+          responseData?.image ||
+          "";
+
+        if (returnedImage) {
+          updatedUser.image =
+            returnedImage;
+
+          updatedUser.profile_photo =
+            returnedImage;
+        } else if (
+          profileImage?.uri
+        ) {
+          // Temporary local preview only.
+          updatedUser.image =
+            profileImage.uri;
+        }
+
+        await AsyncStorage.setItem(
+          "user",
+          JSON.stringify(updatedUser)
+        );
+
+        await AsyncStorage.setItem(
+          "name",
+          String(
+            updatedUser.name || ""
+          )
+        );
+
+        console.log(
+          "LOCAL USER STORAGE UPDATED"
+        );
+      } catch (storageError) {
+        console.log(
+          "LOCAL STORAGE UPDATE ERROR:",
+          storageError
+        );
+      }
+
+      // ========================================================
+      // SUCCESS
+      // ========================================================
+
       Alert.alert(
-        "Update Failed",
-        errorMessage
+        "Profile Updated",
+        "Your profile has been updated successfully.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              router.back();
+            },
+          },
+        ]
       );
     } catch (error) {
       console.log(
-        "UPDATE PROFILE ERROR =>",
+        "SAVE PROFILE ERROR:",
         error
       );
 
       if (
-        error?.name ===
-        "AbortError"
+        error?.name === "AbortError"
       ) {
         Alert.alert(
-          "Timeout",
-          "The server took too long to respond. Please try again."
+          "Request Timeout",
+          "The profile update took too long. Please try again."
         );
       } else {
         Alert.alert(
-          "Error",
+          "Update Failed",
           error?.message ||
             "Something went wrong while updating your profile."
         );
       }
     } finally {
-      setIsLoading(false);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+
+      setSaving(false);
     }
   };
 
   // ============================================================
-  // INPUT FIELD
+  // IMAGE SOURCE
   // ============================================================
 
-  const InputField = ({
-    label,
-    value,
-    onChangeText,
-    placeholder,
-    keyboardType = "default",
-    multiline = false,
-    icon,
-  }) => {
-    return (
-      <View
-        style={styles.fieldWrapper}
-      >
-        <Text style={styles.label}>
-          {label}
-        </Text>
-
-        <View
-          style={[
-            styles.inputContainer,
-            multiline &&
-              styles.multilineContainer,
-          ]}
-        >
-          {icon && (
-            <Ionicons
-              name={icon}
-              size={20}
-              color="#F59E0B"
-              style={
-                styles.inputIcon
-              }
-            />
-          )}
-
-          <TextInput
-            value={value}
-            onChangeText={
-              onChangeText
-            }
-            placeholder={
-              placeholder
-            }
-            placeholderTextColor="#9CA3AF"
-            keyboardType={
-              keyboardType
-            }
-            multiline={
-              multiline
-            }
-            numberOfLines={
-              multiline ? 4 : 1
-            }
-            editable={!isLoading}
-            textAlignVertical={
-              multiline
-                ? "top"
-                : "center"
-            }
-            style={[
-              styles.input,
-              multiline &&
-                styles.multilineInput,
-            ]}
-          />
-        </View>
-      </View>
-    );
-  };
-
-  // ============================================================
-  // GENDER FIELD
-  // ============================================================
-
-  const GenderField = () => {
-    return (
-      <View
-        style={styles.fieldWrapper}
-      >
-        <Text style={styles.label}>
-          Gender
-        </Text>
-
-        <TouchableOpacity
-          activeOpacity={0.8}
-          disabled={isLoading}
-          onPress={() =>
-            setShowGenderModal(true)
-          }
-          style={
-            styles.selectContainer
-          }
-        >
-          <Ionicons
-            name="person-outline"
-            size={20}
-            color="#F59E0B"
-          />
-
-          <Text
-            style={[
-              styles.selectText,
-              !gender &&
-                styles.placeholderText,
-            ]}
-          >
-            {gender ||
-              "Select Gender"}
-          </Text>
-
-          <Ionicons
-            name="chevron-down"
-            size={20}
-            color="#6B7280"
-          />
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  // ============================================================
-  // DOB FIELD
-  // ============================================================
-
-  const DateField = () => {
-    return (
-      <View
-        style={styles.fieldWrapper}
-      >
-        <Text style={styles.label}>
-          Date of Birth
-        </Text>
-
-        <TouchableOpacity
-          activeOpacity={0.8}
-          disabled={isLoading}
-          onPress={
-            openDatePicker
-          }
-          style={
-            styles.selectContainer
-          }
-        >
-          <Ionicons
-            name="calendar-outline"
-            size={20}
-            color="#F59E0B"
-          />
-
-          <Text
-            style={[
-              styles.selectText,
-              !dob &&
-                styles.placeholderText,
-            ]}
-          >
-            {dob ||
-              "Select Date of Birth"}
-          </Text>
-
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color="#6B7280"
-          />
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  // ============================================================
-  // PROFILE IMAGE
-  // ============================================================
-
-  const renderProfileImage = () => {
-    if (profileImage?.uri) {
-      return (
-        <Image
-          source={{
-            uri: profileImage.uri,
-          }}
-          style={
-            styles.profileImage
-          }
-        />
-      );
-    }
-
-    const existingImageUrl =
-      getImageUrl(
+  const imageSource =
+    profileImage?.uri
+      ? { uri: profileImage.uri }
+      : typeof existingProfileImage ===
+          "string" &&
         existingProfileImage
-      );
-
-    if (existingImageUrl) {
-      return (
-        <Image
-          source={{
-            uri: existingImageUrl,
-          }}
-          style={
-            styles.profileImage
-          }
-          onError={(error) => {
-            console.log(
-              "PROFILE IMAGE ERROR =>",
-              error?.nativeEvent?.error
-            );
-          }}
-        />
-      );
-    }
-
-    return (
-      <View
-        style={
-          styles.profilePlaceholder
+      ? { uri: existingProfileImage }
+      : existingProfileImage?.uri
+      ? {
+          uri: existingProfileImage.uri,
         }
-      >
-        <Ionicons
-          name="person"
-          size={55}
-          color="#9CA3AF"
-        />
-      </View>
-    );
-  };
+      : null;
 
   // ============================================================
   // LOADING SCREEN
   // ============================================================
 
-  if (isProfileLoading) {
+  if (loading) {
     return (
       <SafeAreaView
-        style={styles.safeArea}
-        edges={[
-          "top",
-          "left",
-          "right",
-          "bottom",
-        ]}
+        edges={["top", "bottom"]}
+        style={styles.loadingContainer}
       >
         <StatusBar
-          barStyle="light-content"
-          backgroundColor="#F59E0B"
+          barStyle={
+            isDarkMode
+              ? "light-content"
+              : "dark-content"
+          }
+          backgroundColor={
+            colors.background
+          }
         />
 
-        <LinearGradient
-          colors={[
-            "#F59E0B",
-            "#F97316",
-          ]}
-          start={{
-            x: 0,
-            y: 0,
-          }}
-          end={{
-            x: 1,
-            y: 0,
-          }}
-          style={styles.header}
-        >
-          <TouchableOpacity
-            style={
-              styles.backButton
-            }
-            onPress={() =>
-              router.back()
-            }
-          >
-            <Ionicons
-              name="arrow-back"
-              size={25}
-              color="#FFFFFF"
-            />
-          </TouchableOpacity>
+        <ActivityIndicator
+          size="large"
+          color={colors.gold}
+        />
 
-          <Text
-            style={
-              styles.headerTitle
-            }
-          >
-            Update Profile
-          </Text>
-
-          <View
-            style={
-              styles.headerPlaceholder
-            }
-          />
-        </LinearGradient>
-
-        <View
-          style={
-            styles.loadingContainer
-          }
-        >
-          <ActivityIndicator
-            size="large"
-            color="#F59E0B"
-          />
-
-          <Text
-            style={
-              styles.loadingText
-            }
-          >
-            Loading profile...
-          </Text>
-        </View>
+        <Text style={styles.loadingText}>
+          Loading profile...
+        </Text>
       </SafeAreaView>
     );
   }
 
   // ============================================================
-  // MAIN SCREEN
+  // MAIN UI
   // ============================================================
 
   return (
     <SafeAreaView
+      edges={["top", "bottom"]}
       style={styles.safeArea}
-      edges={[
-        "top",
-        "left",
-        "right",
-        "bottom",
-      ]}
     >
       <StatusBar
         barStyle="light-content"
-        backgroundColor="#F59E0B"
+        backgroundColor={colors.orange}
       />
 
-      {/* ======================================================
-          HEADER
-      ====================================================== */}
-
-      <LinearGradient
-        colors={[
-          "#F59E0B",
-          "#F97316",
-        ]}
-        start={{
-          x: 0,
-          y: 0,
-        }}
-        end={{
-          x: 1,
-          y: 0,
-        }}
-        style={styles.header}
-      >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() =>
-            router.back()
-          }
-          disabled={isLoading}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={25}
-            color="#FFFFFF"
-          />
-        </TouchableOpacity>
-
-        <Text
-          style={
-            styles.headerTitle
-          }
-        >
-          Update Profile
-        </Text>
-
-        <View
-          style={
-            styles.headerPlaceholder
-          }
-        />
-      </LinearGradient>
-
-      {/* ======================================================
-          BODY
-      ====================================================== */}
-
       <KeyboardAvoidingView
-        style={
-          styles.keyboardView
-        }
+        style={styles.flex}
         behavior={
           Platform.OS === "ios"
             ? "padding"
@@ -1699,792 +1418,1554 @@ const UpdateProfileScreen = () => {
             styles.contentContainer
           }
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={
-            false
-        }
+          showsVerticalScrollIndicator={false}
         >
-          {/* ==================================================
-              PROFILE PHOTO
-          ================================================== */}
+          {/* ================================================== */}
+          {/* HEADER */}
+          {/* ================================================== */}
 
-          <View
-            style={
-              styles.profileSection
-            }
+          <LinearGradient
+            colors={[
+              colors.gold,
+              colors.orange,
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.header}
           >
             <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={pickImage}
-              disabled={isLoading}
+              activeOpacity={0.8}
+              onPress={() => router.back()}
+              style={styles.backButton}
+            >
+              <Ionicons
+                name="arrow-back"
+                size={24}
+                color="#FFFFFF"
+              />
+            </TouchableOpacity>
+
+            <View
+              style={
+                styles.headerTextContainer
+              }
+            >
+              <Text
+                style={styles.headerTitle}
+              >
+                Update Profile
+              </Text>
+
+              <Text
+                style={
+                  styles.headerSubtitle
+                }
+              >
+                Keep your information up to date
+              </Text>
+            </View>
+          </LinearGradient>
+
+          {/* ================================================== */}
+          {/* PROFILE PHOTO */}
+          {/* ================================================== */}
+
+          <View
+            style={styles.profileSection}
+          >
+            <View
               style={
                 styles.profileImageWrapper
               }
             >
-              {renderProfileImage()}
+              {imageSource ? (
+                <Image
+                  source={imageSource}
+                  style={styles.profileImage}
+                />
+              ) : (
+                <View
+                  style={
+                    styles.profileImagePlaceholder
+                  }
+                >
+                  <Ionicons
+                    name="person"
+                    size={55}
+                    color={
+                      colors.mutedForeground
+                    }
+                  />
+                </View>
+              )}
 
-              <View
-                style={
-                  styles.cameraButton
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={
+                  pickProfileImage
                 }
+                style={styles.cameraButton}
               >
                 <Ionicons
                   name="camera"
-                  size={21}
+                  size={19}
                   color="#FFFFFF"
                 />
-              </View>
-            </TouchableOpacity>
-
-            <Text
-              style={
-                styles.changePhotoText
-              }
-            >
-              Tap to change profile photo
-            </Text>
-          </View>
-
-          {/* ==================================================
-              PERSONAL INFORMATION
-          ================================================== */}
-
-          <Text
-            style={
-              styles.sectionTitle
-            }
-          >
-            Personal Information
-          </Text>
-
-          <InputField
-            label="Name"
-            value={name}
-            onChangeText={setName}
-            placeholder="Enter your name"
-            icon="person-outline"
-          />
-
-          <InputField
-            label="Phone Number"
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="Enter phone number"
-            keyboardType="phone-pad"
-            icon="call-outline"
-          />
-
-          <GenderField />
-
-          <DateField />
-
-          <InputField
-            label="Bio"
-            value={bio}
-            onChangeText={setBio}
-            placeholder="Tell us about yourself"
-            multiline
-            icon="document-text-outline"
-          />
-
-          {/* ==================================================
-              LOCATION
-          ================================================== */}
-
-          <View
-            style={
-              styles.sectionHeaderRow
-            }
-          >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              Location
-            </Text>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
+              activeOpacity={0.7}
               onPress={
-                getCurrentLocation
-              }
-              disabled={isLoading}
-              style={
-                styles.locationButton
+                pickProfileImage
               }
             >
-              <Ionicons
-                name="locate-outline"
-                size={17}
-                color="#F59E0B"
-              />
-
               <Text
                 style={
-                  styles.locationButtonText
+                  styles.changePhotoText
                 }
               >
-                Use Current
+                Change profile photo
               </Text>
             </TouchableOpacity>
           </View>
 
-          <InputField
-            label="Country"
-            value={country}
-            onChangeText={setCountry}
-            placeholder="Enter country"
-            icon="globe-outline"
-          />
+          {/* ================================================== */}
+          {/* PERSONAL INFORMATION */}
+          {/* ================================================== */}
 
-          <InputField
-            label="State"
-            value={state}
-            onChangeText={setState}
-            placeholder="Enter state"
-            icon="map-outline"
-          />
+          <View style={styles.section}>
+            <Text
+              style={styles.sectionTitle}
+            >
+              Personal Information
+            </Text>
 
-          <InputField
-            label="City"
-            value={city}
-            onChangeText={setCity}
-            placeholder="Enter city"
-            icon="business-outline"
-          />
+            {/* NAME */}
 
-          <InputField
-            label="Pincode"
-            value={pincode}
-            onChangeText={setPincode}
-            placeholder="Enter pincode"
-            keyboardType="number-pad"
-            icon="pin-outline"
-          />
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Full Name
+              </Text>
 
-          <InputField
-            label="Address"
-            value={address}
-            onChangeText={setAddress}
-            placeholder="Enter address"
-            multiline
-            icon="location-outline"
-          />
+              <View
+                style={styles.inputWrapper}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
 
-          {/* ==================================================
-              COORDINATES
-          ================================================== */}
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your name"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={styles.input}
+                  autoCapitalize="words"
+                />
+              </View>
+            </View>
 
-          <Text
-            style={
-              styles.sectionTitle
-            }
-          >
-            Location Coordinates
-          </Text>
+            {/* PHONE */}
 
-          <InputField
-            label="Latitude"
-            value={latitude}
-            onChangeText={setLatitude}
-            placeholder="Latitude"
-            keyboardType="decimal-pad"
-            icon="navigate-outline"
-          />
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Phone Number
+              </Text>
 
-          <InputField
-            label="Longitude"
-            value={longitude}
-            onChangeText={setLongitude}
-            placeholder="Longitude"
-            keyboardType="decimal-pad"
-            icon="navigate-outline"
-          />
+              <View
+                style={styles.inputWrapper}
+              >
+                <Ionicons
+                  name="call-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
 
-          {/* ==================================================
-              FOOD PREFERENCES
-          ================================================== */}
+                <TextInput
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="Enter phone number"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={styles.input}
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </View>
 
-          <Text
-            style={
-              styles.sectionTitle
-            }
-          >
-            Food Preferences
-          </Text>
+            {/* GENDER */}
 
-          <InputField
-            label="Food Preferences"
-            value={foodPreferences}
-            onChangeText={
-              setFoodPreferences
-            }
-            placeholder="Example: Biryani, Indian food"
-            multiline
-            icon="restaurant-outline"
-          />
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Gender
+              </Text>
 
-          <InputField
-            label="Dietary Preference"
-            value={
-              dietaryPreference
-            }
-            onChangeText={
-              setDietaryPreference
-            }
-            placeholder="Example: Vegetarian"
-            icon="leaf-outline"
-          />
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() =>
+                  setGenderModalVisible(
+                    true
+                  )
+                }
+                style={
+                  styles.inputWrapper
+                }
+              >
+                <Ionicons
+                  name="people-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
 
-          <InputField
-            label="Favorite Cuisine"
-            value={
-              favoriteCuisine
-            }
-            onChangeText={
-              setFavoriteCuisine
-            }
-            placeholder="Example: Indian, Chinese"
-            icon="fast-food-outline"
-          />
+                <Text
+                  style={[
+                    styles.selectText,
+                    !gender &&
+                      styles.placeholderText,
+                  ]}
+                >
+                  {gender
+                    ? GENDER_OPTIONS.find(
+                        (item) =>
+                          item.value ===
+                          gender
+                      )?.label ||
+                      gender
+                    : "Select gender"}
+                </Text>
 
-          {/* ==================================================
-              UPDATE BUTTON
-          ================================================== */}
+                <Ionicons
+                  name="chevron-down"
+                  size={20}
+                  color={
+                    colors.mutedForeground
+                  }
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* DATE OF BIRTH */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Date of Birth
+              </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={
+                  openDatePicker
+                }
+                style={
+                  styles.inputWrapper
+                }
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
+
+                <Text
+                  style={[
+                    styles.selectText,
+                    !dob &&
+                      styles.placeholderText,
+                  ]}
+                >
+                  {dob ||
+                    "Select date of birth"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* DATE PICKER */}
+
+            {datePickerVisible && (
+              <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display={
+                  Platform.OS === "ios"
+                    ? "spinner"
+                    : "default"
+                }
+                maximumDate={
+                  new Date()
+                }
+                onValueChange={
+                  handleDateChange
+                }
+                themeVariant={
+                  isDarkMode
+                    ? "dark"
+                    : "light"
+                }
+              />
+            )}
+
+            {/* BIO */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Bio
+              </Text>
+
+              <View
+                style={[
+                  styles.inputWrapper,
+                  styles.textAreaWrapper,
+                ]}
+              >
+                <Ionicons
+                  name="document-text-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={[
+                    styles.inputIcon,
+                    styles.textAreaIcon,
+                  ]}
+                />
+
+                <TextInput
+                  value={bio}
+                  onChangeText={setBio}
+                  placeholder="Tell us something about yourself"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={[
+                    styles.input,
+                    styles.textArea,
+                  ]}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* ================================================== */}
+          {/* LOCATION */}
+          {/* ================================================== */}
+
+          <View style={styles.section}>
+            <View
+              style={
+                styles.sectionTitleRow
+              }
+            >
+              <Text
+                style={styles.sectionTitle}
+              >
+                Location
+              </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={
+                  getCurrentLocation
+                }
+                disabled={
+                  gettingLocation
+                }
+                style={
+                  styles.locationButton
+                }
+              >
+                {gettingLocation ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.gold}
+                  />
+                ) : (
+                  <Ionicons
+                    name="locate-outline"
+                    size={17}
+                    color={colors.gold}
+                  />
+                )}
+
+                <Text
+                  style={
+                    styles.locationButtonText
+                  }
+                >
+                  {gettingLocation
+                    ? "Getting..."
+                    : "Use Current"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* COUNTRY */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Country
+              </Text>
+
+              <View
+                style={styles.inputWrapper}
+              >
+                <Ionicons
+                  name="globe-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
+
+                <TextInput
+                  value={country}
+                  onChangeText={
+                    setCountry
+                  }
+                  placeholder="Country"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={styles.input}
+                />
+              </View>
+            </View>
+
+            {/* STATE */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                State
+              </Text>
+
+              <View
+                style={styles.inputWrapper}
+              >
+                <Ionicons
+                  name="map-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
+
+                <TextInput
+                  value={state}
+                  onChangeText={setState}
+                  placeholder="State"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={styles.input}
+                />
+              </View>
+            </View>
+
+            {/* CITY */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                City
+              </Text>
+
+              <View
+                style={styles.inputWrapper}
+              >
+                <Ionicons
+                  name="business-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
+
+                <TextInput
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="City"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={styles.input}
+                />
+              </View>
+            </View>
+
+            {/* PINCODE */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Pincode
+              </Text>
+
+              <View
+                style={styles.inputWrapper}
+              >
+                <Ionicons
+                  name="mail-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
+
+                <TextInput
+                  value={pincode}
+                  onChangeText={
+                    setPincode
+                  }
+                  placeholder="Pincode"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={styles.input}
+                  keyboardType="number-pad"
+                />
+              </View>
+            </View>
+
+            {/* ADDRESS */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Address
+              </Text>
+
+              <View
+                style={[
+                  styles.inputWrapper,
+                  styles.textAreaWrapper,
+                ]}
+              >
+                <Ionicons
+                  name="location-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={[
+                    styles.inputIcon,
+                    styles.textAreaIcon,
+                  ]}
+                />
+
+                <TextInput
+                  value={address}
+                  onChangeText={
+                    setAddress
+                  }
+                  placeholder="Enter your address"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={[
+                    styles.input,
+                    styles.textArea,
+                  ]}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* ================================================== */}
+          {/* COORDINATES */}
+          {/* ================================================== */}
+
+          <View style={styles.section}>
+            <Text
+              style={styles.sectionTitle}
+            >
+              Location Coordinates
+            </Text>
+
+            <View
+              style={styles.coordinatesRow}
+            >
+              {/* LATITUDE */}
+
+              <View
+                style={[
+                  styles.coordinateBox,
+                  styles.coordinateBoxLeft,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.coordinateLabel
+                  }
+                >
+                  Latitude
+                </Text>
+
+                <Text
+                  numberOfLines={1}
+                  style={
+                    styles.coordinateValue
+                  }
+                >
+                  {latitude ||
+                    "Not available"}
+                </Text>
+              </View>
+
+              {/* LONGITUDE */}
+
+              <View
+                style={[
+                  styles.coordinateBox,
+                  styles.coordinateBoxRight,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.coordinateLabel
+                  }
+                >
+                  Longitude
+                </Text>
+
+                <Text
+                  numberOfLines={1}
+                  style={
+                    styles.coordinateValue
+                  }
+                >
+                  {longitude ||
+                    "Not available"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* ================================================== */}
+          {/* FOOD PREFERENCES */}
+          {/* ================================================== */}
+
+          <View style={styles.section}>
+            <Text
+              style={styles.sectionTitle}
+            >
+              Food Preferences
+            </Text>
+
+            {/* FOOD PREFERENCES */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Food Preferences
+              </Text>
+
+              <View
+                style={styles.inputWrapper}
+              >
+                <Ionicons
+                  name="restaurant-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
+
+                <TextInput
+                  value={
+                    foodPreferences
+                  }
+                  onChangeText={
+                    setFoodPreferences
+                  }
+                  placeholder="e.g. Indian, Italian, Healthy"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={styles.input}
+                />
+              </View>
+            </View>
+
+            {/* DIETARY PREFERENCE */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Dietary Preference
+              </Text>
+
+              <View
+                style={styles.inputWrapper}
+              >
+                <Ionicons
+                  name="nutrition-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
+
+                <TextInput
+                  value={
+                    dietaryPreference
+                  }
+                  onChangeText={
+                    setDietaryPreference
+                  }
+                  placeholder="e.g. Vegetarian, Vegan"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={styles.input}
+                />
+              </View>
+            </View>
+
+            {/* FAVORITE CUISINE */}
+
+            <View
+              style={styles.inputGroup}
+            >
+              <Text
+                style={styles.inputLabel}
+              >
+                Favorite Cuisine
+              </Text>
+
+              <View
+                style={styles.inputWrapper}
+              >
+                <Ionicons
+                  name="heart-outline"
+                  size={20}
+                  color={colors.gold}
+                  style={
+                    styles.inputIcon
+                  }
+                />
+
+                <TextInput
+                  value={
+                    favoriteCuisine
+                  }
+                  onChangeText={
+                    setFavoriteCuisine
+                  }
+                  placeholder="e.g. South Indian"
+                  placeholderTextColor={
+                    colors.mutedForeground
+                  }
+                  style={styles.input}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* ================================================== */}
+          {/* UPDATE BUTTON */}
+          {/* ================================================== */}
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={
-              updateProfile
-            }
-            disabled={isLoading}
-            style={
-              styles.updateButton
-            }
+            onPress={saveProfile}
+            disabled={saving}
+            style={[
+              styles.updateButtonWrapper,
+              saving &&
+                styles.updateButtonDisabled,
+            ]}
           >
             <LinearGradient
               colors={[
-                "#F59E0B",
-                "#F97316",
+                colors.gold,
+                colors.orange,
               ]}
-              start={{
-                x: 0,
-                y: 0,
-              }}
-              end={{
-                x: 1,
-                y: 0,
-              }}
-              style={
-                styles.updateGradient
-              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.updateButton}
             >
-              {isLoading ? (
-                <>
-                  <ActivityIndicator
-                    size="small"
-                    color="#FFFFFF"
-                  />
-
-                  <Text
-                    style={
-                      styles.buttonText
-                    }
-                  >
-                    Updating...
-                  </Text>
-                </>
+              {saving ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#FFFFFF"
+                />
               ) : (
-                <>
-                  <Ionicons
-                    name="save-outline"
-                    size={22}
-                    color="#FFFFFF"
-                  />
-
-                  <Text
-                    style={
-                      styles.buttonText
-                    }
-                  >
-                    Update Profile
-                  </Text>
-                </>
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={21}
+                  color="#FFFFFF"
+                />
               )}
+
+              <Text
+                style={
+                  styles.updateButtonText
+                }
+              >
+                {saving
+                  ? "Updating..."
+                  : "Update Profile"}
+              </Text>
             </LinearGradient>
           </TouchableOpacity>
 
           <View
-            style={
-              styles.bottomSpacing
-            }
+            style={styles.bottomSpace}
           />
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ======================================================
-          GENDER MODAL
-      ====================================================== */}
+      {/* ====================================================== */}
+      {/* GENDER MODAL */}
+      {/* ====================================================== */}
 
       <Modal
-        visible={showGenderModal}
+        visible={genderModalVisible}
         transparent
         animationType="fade"
         onRequestClose={() =>
-          setShowGenderModal(false)
+          setGenderModalVisible(false)
         }
       >
-        <TouchableOpacity
-          activeOpacity={1}
-          style={
-            styles.modalOverlay
-          }
+        <Pressable
+          style={styles.modalOverlay}
           onPress={() =>
-            setShowGenderModal(false)
+            setGenderModalVisible(false)
           }
         >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={
-              styles.genderModal
+          <Pressable
+            style={styles.genderModal}
+            onPress={(event) =>
+              event.stopPropagation()
             }
           >
             <View
-              style={
-                styles.modalHandle
-              }
-            />
-
-            <Text
-              style={
-                styles.modalTitle
-              }
+              style={styles.modalHeader}
             >
-              Select Gender
-            </Text>
-
-            {[
-              "Male",
-              "Female",
-              "Other",
-            ].map((item) => (
-              <TouchableOpacity
-                key={item}
-                style={
-                  styles.genderOption
-                }
-                onPress={() => {
-                  setGender(item);
-                  setShowGenderModal(
-                    false
-                  );
-                }}
+              <Text
+                style={styles.modalTitle}
               >
-                <View
-                  style={
-                    styles.genderIcon
-                  }
-                >
-                  <Ionicons
-                    name={
-                      item ===
-                      "Male"
-                        ? "male"
-                        : item ===
-                          "Female"
-                        ? "female"
-                        : "person"
-                    }
-                    size={20}
-                    color="#F59E0B"
-                  />
-                </View>
+                Select Gender
+              </Text>
 
-                <Text
-                  style={
-                    styles.genderText
-                  }
-                >
-                  {item}
-                </Text>
-
-                {gender ===
-                  item && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={24}
-                    color="#F59E0B"
-                  />
-                )}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() =>
+                  setGenderModalVisible(
+                    false
+                  )
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={colors.foreground}
+                />
               </TouchableOpacity>
-            ))}
-          </TouchableOpacity>
-        </TouchableOpacity>
+            </View>
+
+            <View
+              style={styles.genderOptions}
+            >
+              {GENDER_OPTIONS.map(
+                (option) => {
+                  const selected =
+                    gender ===
+                    option.value;
+
+                  return (
+                    <TouchableOpacity
+                      key={
+                        option.value
+                      }
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setGender(
+                          option.value
+                        );
+
+                        setGenderModalVisible(
+                          false
+                        );
+                      }}
+                      style={[
+                        styles.genderOption,
+                        selected &&
+                          styles.genderOptionSelected,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.genderIcon,
+                          selected &&
+                            styles.genderIconSelected,
+                        ]}
+                      >
+                        <Ionicons
+                          name={
+                            option.icon
+                          }
+                          size={21}
+                          color={
+                            selected
+                              ? colors.orange
+                              : colors.mutedForeground
+                          }
+                        />
+                      </View>
+
+                      <Text
+                        style={[
+                          styles.genderOptionText,
+                          selected &&
+                            styles.genderOptionTextSelected,
+                        ]}
+                      >
+                        {
+                          option.label
+                        }
+                      </Text>
+
+                      {selected && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={22}
+                          color={
+                            colors.orange
+                          }
+                          style={
+                            styles.genderCheck
+                          }
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                }
+              )}
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
-
-      {/* ======================================================
-          DATE PICKER
-      ====================================================== */}
-
-      {showDatePicker && (
-        <DateTimePicker
-          value={selectedDate}
-          mode="date"
-          display={
-            Platform.OS === "ios"
-              ? "spinner"
-              : "default"
-          }
-          minimumDate={
-            new Date(1950, 0, 1)
-          }
-          maximumDate={
-            new Date()
-          }
-          onChange={
-            onDateChange
-          }
-        />
-      )}
     </SafeAreaView>
   );
-};
+}
 
 // ============================================================
-// STYLES
+// DYNAMIC THEME STYLES
 // ============================================================
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F7F8FA",
-  },
-
-  keyboardView: {
-    flex: 1,
-  },
-
-  // ==========================================================
-  // HEADER
-  // ==========================================================
-
-  header: {
-    height: 62,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-  },
-
-  backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor:
-      "rgba(255,255,255,0.15)",
-  },
-
-  headerTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "700",
-  },
-
-  headerPlaceholder: {
-    width: 42,
-    height: 42,
-  },
-
-  // ==========================================================
-  // BODY
-  // ==========================================================
-
-  container: {
-    flex: 1,
-    backgroundColor: "#F7F8FA",
-  },
-
-  contentContainer: {
-    padding: 16,
-  },
-
-  // ==========================================================
-  // PROFILE PHOTO
-  // ==========================================================
-
-  profileSection: {
-    alignItems: "center",
-    marginTop: 8,
-    marginBottom: 24,
-  },
-
-  profileImageWrapper: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    position: "relative",
-  },
-
-  profileImage: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    resizeMode: "cover",
-    backgroundColor: "#E5E7EB",
-  },
-
-  profilePlaceholder: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    backgroundColor: "#E5E7EB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  cameraButton: {
-    position: "absolute",
-    right: 0,
-    bottom: 3,
-    width: 43,
-    height: 43,
-    borderRadius: 22,
-    backgroundColor: "#F59E0B",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
+const createStyles = (
+  colors,
+  isDarkMode
+) =>
+  StyleSheet.create({
+    flex: {
+      flex: 1,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
 
-  changePhotoText: {
-    marginTop: 10,
-    fontSize: 13,
-    color: "#6B7280",
-  },
+    // ============================================================
+    // SCREEN
+    // ============================================================
 
-  // ==========================================================
-  // SECTION
-  // ==========================================================
+    safeArea: {
+      flex: 1,
+      backgroundColor: isDarkMode
+        ? "#0F0E0D"
+        : "#FEF8F3",
+    },
 
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1F2937",
-    marginTop: 12,
-    marginBottom: 15,
-  },
+    container: {
+      flex: 1,
+      backgroundColor: isDarkMode
+        ? "#0F0E0D"
+        : "#FEF8F3",
+    },
 
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+    contentContainer: {
+      paddingBottom: 25,
+    },
 
-  locationButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
-    marginBottom: 12,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 10,
-    backgroundColor: "#FFF7ED",
-  },
+    // ============================================================
+    // LOADING
+    // ============================================================
 
-  locationButtonText: {
-    color: "#F59E0B",
-    fontSize: 12,
-    fontWeight: "700",
-    marginLeft: 5,
-  },
+    loadingContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: isDarkMode
+        ? "#0F0E0D"
+        : "#FEF8F3",
+    },
 
-  // ==========================================================
-  // INPUT
-  // ==========================================================
+    loadingText: {
+      marginTop: 14,
+      fontSize: 15,
+      color: isDarkMode
+        ? "#B8B3AD"
+        : "#777777",
+      fontWeight: "500",
+    },
 
-  fieldWrapper: {
-    marginBottom: 16,
-  },
+    // ============================================================
+    // HEADER
+    // ============================================================
 
-  label: {
-    color: "#374151",
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 7,
-  },
+    header: {
+      minHeight: 118,
+      paddingHorizontal: 20,
+      paddingTop: 18,
+      paddingBottom: 22,
+      flexDirection: "row",
+      alignItems: "center",
+      borderBottomLeftRadius: 24,
+      borderBottomRightRadius: 24,
+    },
 
-  inputContainer: {
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-  },
+    backButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor:
+        "rgba(255,255,255,0.18)",
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.22)",
+    },
 
-  multilineContainer: {
-    alignItems: "flex-start",
-    minHeight: 115,
-    paddingTop: 15,
-  },
+    headerTextContainer: {
+      flex: 1,
+      marginLeft: 14,
+    },
 
-  inputIcon: {
-    marginRight: 10,
-  },
+    headerTitle: {
+      color: "#FFFFFF",
+      fontSize: 24,
+      fontWeight: "800",
+      letterSpacing: 0.2,
+    },
 
-  input: {
-    flex: 1,
-    color: "#111827",
-    fontSize: 15,
-    paddingVertical: 0,
-  },
+    headerSubtitle: {
+      color: "rgba(255,255,255,0.88)",
+      fontSize: 13,
+      marginTop: 5,
+      fontWeight: "500",
+    },
 
-  multilineInput: {
-    minHeight: 85,
-    paddingTop: 0,
-  },
+    // ============================================================
+    // PROFILE PHOTO
+    // ============================================================
 
-  // ==========================================================
-  // SELECT
-  // ==========================================================
+    profileSection: {
+      alignItems: "center",
+      paddingTop: 25,
+      paddingBottom: 8,
+    },
 
-  selectContainer: {
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-  },
+    profileImageWrapper: {
+      position: "relative",
+      width: 116,
+      height: 116,
+      borderRadius: 58,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: isDarkMode
+        ? "#211B16"
+        : "#FFF4EA",
+      borderWidth: 3,
+      borderColor: isDarkMode
+        ? "#FBBF24"
+        : "#F97316",
+      shadowColor: "#F97316",
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
+      shadowOpacity:
+        isDarkMode ? 0 : 0.16,
+      shadowRadius: 10,
+      elevation: 5,
+    },
 
-  selectText: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 15,
-    color: "#111827",
-  },
+    profileImage: {
+      width: 108,
+      height: 108,
+      borderRadius: 54,
+      backgroundColor: isDarkMode
+        ? "#211B16"
+        : "#FFF4EA",
+    },
 
-  placeholderText: {
-    color: "#9CA3AF",
-  },
+    profileImagePlaceholder: {
+      width: 108,
+      height: 108,
+      borderRadius: 54,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: isDarkMode
+        ? "#211B16"
+        : "#FFF4EA",
+    },
 
-  // ==========================================================
-  // BUTTON
-  // ==========================================================
+    cameraButton: {
+      position: "absolute",
+      right: -2,
+      bottom: 1,
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#F97316",
+      borderWidth: 3,
+      borderColor: isDarkMode
+        ? "#0F0E0D"
+        : "#FEF8F3",
+      elevation: 5,
+      shadowColor: "#F97316",
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+      shadowOpacity: 0.25,
+      shadowRadius: 5,
+    },
 
-  updateButton: {
-    marginTop: 12,
-    borderRadius: 16,
-    overflow: "hidden",
-  },
+    changePhotoText: {
+      marginTop: 11,
+      fontSize: 14,
+      fontWeight: "700",
+      color: isDarkMode
+        ? "#FBBF24"
+        : "#F97316",
+    },
 
-  updateGradient: {
-    height: 55,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    // ============================================================
+    // SECTIONS
+    // ============================================================
 
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-    marginLeft: 9,
-  },
+    section: {
+      marginHorizontal: 16,
+      marginTop: 18,
+      padding: 17,
+      borderRadius: 20,
+      backgroundColor: isDarkMode
+        ? "#171412"
+        : "#FFFFFF",
+      borderWidth: 1,
+      borderColor: isDarkMode
+        ? "#302820"
+        : "#F0E5DC",
+      shadowColor: "#000000",
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+      shadowOpacity:
+        isDarkMode ? 0 : 0.055,
+      shadowRadius: 10,
+      elevation: isDarkMode ? 0 : 2,
+    },
 
-  // ==========================================================
-  // LOADING
-  // ==========================================================
+    sectionTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 14,
+    },
 
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F7F8FA",
-  },
+    sectionTitleRowText: {
+      flex: 1,
+    },
 
-  loadingText: {
-    marginTop: 12,
-    color: "#6B7280",
-    fontSize: 15,
-  },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: isDarkMode
+        ? "#FFFFFF"
+        : "#111111",
+      marginBottom: 14,
+    },
 
-  // ==========================================================
-  // GENDER MODAL
-  // ==========================================================
+    // ============================================================
+    // INPUT GROUP
+    // ============================================================
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
-  },
+    inputGroup: {
+      marginBottom: 16,
+    },
 
-  genderModal: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 35,
-  },
+    inputLabel: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: isDarkMode
+        ? "#F5F1ED"
+        : "#222222",
+      marginBottom: 7,
+    },
 
-  modalHandle: {
-    width: 45,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#D1D5DB",
-    alignSelf: "center",
-    marginBottom: 20,
-  },
+    inputWrapper: {
+      minHeight: 52,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: isDarkMode
+        ? "#382F27"
+        : "#E8DDD4",
+      backgroundColor: isDarkMode
+        ? "#211B16"
+        : "#FFF9F5",
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 13,
+    },
 
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 12,
-  },
+    inputIcon: {
+      marginRight: 10,
+    },
 
-  genderOption: {
-    minHeight: 58,
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
+    input: {
+      flex: 1,
+      minHeight: 50,
+      paddingVertical: 10,
+      fontSize: 15,
+      color: isDarkMode
+        ? "#FFFFFF"
+        : "#111111",
+    },
 
-  genderIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#FFF7ED",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
+    selectText: {
+      flex: 1,
+      fontSize: 15,
+      color: isDarkMode
+        ? "#FFFFFF"
+        : "#111111",
+    },
 
-  genderText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#1F2937",
-  },
+    placeholderText: {
+      color: isDarkMode
+        ? "#817970"
+        : "#999999",
+    },
 
-  // ==========================================================
-  // BOTTOM
-  // ==========================================================
+    // ============================================================
+    // TEXT AREAS
+    // ============================================================
 
-  bottomSpacing: {
-    height: 35,
-  },
-});
+    textAreaWrapper: {
+      alignItems: "flex-start",
+      minHeight: 105,
+      paddingTop: 12,
+    },
 
-export default UpdateProfileScreen;
+    textAreaIcon: {
+      marginTop: 2,
+    },
 
+    textArea: {
+      minHeight: 85,
+      paddingTop: 0,
+      textAlignVertical: "top",
+    },
+
+    // ============================================================
+    // LOCATION BUTTON
+    // ============================================================
+
+    locationButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 38,
+      paddingHorizontal: 12,
+      borderRadius: 11,
+      backgroundColor: isDarkMode
+        ? "rgba(249,115,22,0.14)"
+        : "#FFF1E5",
+      borderWidth: 1,
+      borderColor: isDarkMode
+        ? "rgba(249,115,22,0.30)"
+        : "#FFD5B5",
+      gap: 5,
+    },
+
+    locationButtonText: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: isDarkMode
+        ? "#FBBF24"
+        : "#F97316",
+    },
+
+    // ============================================================
+    // COORDINATES
+    // ============================================================
+
+    coordinatesRow: {
+      flexDirection: "row",
+    },
+
+    coordinateBox: {
+      flex: 1,
+      padding: 13,
+      borderRadius: 13,
+      backgroundColor: isDarkMode
+        ? "#211B16"
+        : "#FFF9F5",
+      borderWidth: 1,
+      borderColor: isDarkMode
+        ? "#382F27"
+        : "#E8DDD4",
+    },
+
+    coordinateBoxLeft: {
+      marginRight: 6,
+    },
+
+    coordinateBoxRight: {
+      marginLeft: 6,
+    },
+
+    coordinateLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: isDarkMode
+        ? "#9C928A"
+        : "#777777",
+      marginBottom: 6,
+    },
+
+    coordinateValue: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: isDarkMode
+        ? "#FBBF24"
+        : "#F97316",
+    },
+
+    // ============================================================
+    // UPDATE BUTTON
+    // ============================================================
+
+    updateButtonWrapper: {
+      marginHorizontal: 16,
+      marginTop: 23,
+      borderRadius: 16,
+      overflow: "hidden",
+      shadowColor: "#F97316",
+      shadowOffset: {
+        width: 0,
+        height: 5,
+      },
+      shadowOpacity:
+        isDarkMode ? 0.18 : 0.22,
+      shadowRadius: 9,
+      elevation: 5,
+    },
+
+    updateButtonDisabled: {
+      opacity: 0.65,
+    },
+
+    updateButton: {
+      minHeight: 56,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+
+    updateButtonText: {
+      color: "#FFFFFF",
+      fontSize: 16,
+      fontWeight: "800",
+      letterSpacing: 0.2,
+    },
+
+    bottomSpace: {
+      height: 35,
+    },
+
+    // ============================================================
+    // GENDER MODAL
+    // ============================================================
+
+    modalOverlay: {
+      flex: 1,
+      justifyContent: "flex-end",
+      backgroundColor: "rgba(0,0,0,0.55)",
+    },
+
+    genderModal: {
+      backgroundColor: isDarkMode
+        ? "#171412"
+        : "#FFFFFF",
+      borderTopLeftRadius: 26,
+      borderTopRightRadius: 26,
+      paddingHorizontal: 18,
+      paddingTop: 19,
+      paddingBottom:
+        Platform.OS === "ios"
+          ? 34
+          : 24,
+      borderTopWidth: 1,
+      borderColor: isDarkMode
+        ? "#382F27"
+        : "#F0E5DC",
+    },
+
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingBottom: 15,
+      borderBottomWidth: 1,
+      borderBottomColor:
+        isDarkMode
+          ? "#302820"
+          : "#EEE4DC",
+    },
+
+    modalTitle: {
+      fontSize: 19,
+      fontWeight: "800",
+      color: isDarkMode
+        ? "#FFFFFF"
+        : "#111111",
+    },
+
+    genderOptions: {
+      paddingTop: 11,
+    },
+
+    genderOption: {
+      minHeight: 62,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: isDarkMode
+        ? "#382F27"
+        : "#E8DDD4",
+      backgroundColor: isDarkMode
+        ? "#211B16"
+        : "#FFF9F5",
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      marginBottom: 10,
+    },
+
+    genderOptionSelected: {
+      borderColor: "#F97316",
+      backgroundColor: isDarkMode
+        ? "rgba(249,115,22,0.12)"
+        : "#FFF1E5",
+    },
+
+    genderIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: isDarkMode
+        ? "#30261E"
+        : "#FFF0E2",
+      marginRight: 12,
+    },
+
+    genderIconSelected: {
+      backgroundColor: isDarkMode
+        ? "rgba(249,115,22,0.20)"
+        : "#FFE4D0",
+    },
+
+    genderOptionText: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: "600",
+      color: isDarkMode
+        ? "#F5F1ED"
+        : "#222222",
+    },
+
+    genderOptionTextSelected: {
+      color: isDarkMode
+        ? "#FBBF24"
+        : "#F97316",
+      fontWeight: "800",
+    },
+
+    genderCheck: {
+      marginLeft: 8,
+    },
+  });

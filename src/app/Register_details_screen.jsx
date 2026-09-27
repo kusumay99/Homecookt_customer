@@ -19,7 +19,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-
 // ============================================================
 // API
 // ============================================================
@@ -695,53 +694,31 @@ const RegisterDetailsScreen = () => {
       }
 
       // ------------------------------------------------------
-      // SUCCESS
+      // SUCCESS → IMMEDIATELY OPEN OTP SCREEN
       // ------------------------------------------------------
 
       if (
         response.status === 200 ||
         response.status === 201
       ) {
-        const message =
-          data?.message ||
-          "Registration successful. OTP sent to your email.";
+        const cleanEmail = email.trim().toLowerCase();
 
         console.log(
-          "SIGNUP SUCCESS =>",
-          message
+          "SIGNUP SUCCESS → OTP SCREEN"
         );
 
-        Alert.alert(
-          "Success",
-          message,
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                // ------------------------------------------
-                // EXPO ROUTER → OTP
-                // ------------------------------------------
-
-                router.push({
-                  pathname:
-                    "/OTP",
-
-                  params: {
-                    method:
-                      "email",
-
-                    value:
-                      email.trim(),
-                  },
-                });
-              },
-            },
-          ]
-        );
+        router.push({
+          pathname: "/OTP_screen",
+          params: {
+            method: "email",
+            value: cleanEmail,
+            password: password,
+            username: cleanEmail.split("@")[0],
+          },
+        });
 
         return;
       }
-
       // ------------------------------------------------------
       // API ERROR
       // ------------------------------------------------------
@@ -843,7 +820,7 @@ const RegisterDetailsScreen = () => {
       Alert.alert(
         "Error",
         error?.message ||
-          "Something went wrong. Please try again."
+        "Something went wrong. Please try again."
       );
     } finally {
       setIsLoading(false);
@@ -877,10 +854,10 @@ const RegisterDetailsScreen = () => {
             styles.inputWrapper,
 
             error &&
-              styles.inputWrapperError,
+            styles.inputWrapperError,
 
             !editable &&
-              styles.inputWrapperDisabled,
+            styles.inputWrapperDisabled,
           ]}
         >
           {/* INPUT ICON */}
@@ -1301,11 +1278,11 @@ const RegisterDetailsScreen = () => {
                     styles.checkbox,
 
                     termsAccepted &&
-                      styles.checkboxChecked,
+                    styles.checkboxChecked,
 
                     termsError &&
-                      !termsAccepted &&
-                      styles.checkboxError,
+                    !termsAccepted &&
+                    styles.checkboxError,
                   ]}
                 >
                   {termsAccepted ? (
@@ -1393,7 +1370,7 @@ const RegisterDetailsScreen = () => {
                   styles.createButton,
 
                   isLoading &&
-                    styles.buttonDisabled,
+                  styles.buttonDisabled,
                 ]}
               >
                 {isLoading ? (
@@ -1856,4 +1833,3 @@ const styles = StyleSheet.create({
 });
 
 export default RegisterDetailsScreen;
-

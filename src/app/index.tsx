@@ -1,16 +1,25 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  View,
+} from "react-native";
+
+import { useApp } from "./_layout";
 
 export default function Index() {
+  const { colors } = useApp();
+
   useEffect(() => {
     checkSession();
   }, []);
 
   const checkSession = async () => {
     try {
-      const token = await AsyncStorage.getItem("access_token");
+      const token =
+        await AsyncStorage.getItem("access_token");
 
       if (token) {
         router.replace("/Main_navigation");
@@ -18,20 +27,36 @@ export default function Index() {
         router.replace("/Login_screen");
       }
     } catch (error) {
-      console.log("Session check error:", error);
+      console.log(
+        "SESSION CHECK ERROR:",
+        error
+      );
+
       router.replace("/Login_screen");
     }
   };
 
   return (
     <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-      }}
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
     >
-      <ActivityIndicator size="large" />
+      <ActivityIndicator
+        size="large"
+        color={colors.orange}
+      />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+});

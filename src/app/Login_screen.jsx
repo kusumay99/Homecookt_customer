@@ -4,29 +4,32 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-import { LinearGradient } from "expo-linear-gradient";
-
-import { Ionicons } from "@expo/vector-icons";
-
-import { router } from "expo-router";
+// ============================================================
+// API
+// ============================================================
 
 const BASE_URL = "https://api.homecookt.com";
+
+// ============================================================
+// COLORS
+// ============================================================
 
 const COLORS = {
   orange: "#FF7A00",
@@ -40,65 +43,128 @@ const COLORS = {
   muted: "#777777",
 
   white: "#FFFFFF",
-
   border: "#E5E5E5",
 
   inputBackground: "rgba(255,255,255,0.85)",
 };
 
-const LoginScreen = () => {
-  // ============================================================
-  // STATE
-  // ============================================================
+// ============================================================
+// LOGIN SCREEN
+// ============================================================
 
+export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const [obscurePassword, setObscurePassword] = useState(true);
-
-  // Validation errors
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
-  // ============================================================
-  // VALIDATE EMAIL
-  // ============================================================
+  // ==========================================================
+  // EMAIL VALIDATION
+  // ==========================================================
 
   const validateEmail = (value) => {
-    if (!value || value.trim().length === 0) {
-      return "Enter email";
+    const cleanEmail = value.trim();
+
+    if (!cleanEmail) {
+      return "Please enter your email address.";
     }
 
     const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-    if (!emailRegex.test(value.trim())) {
-      return "Enter valid email";
+    if (!emailRegex.test(cleanEmail)) {
+      return "Please enter a valid email address.";
     }
 
     return "";
   };
 
-  // ============================================================
-  // VALIDATE PASSWORD
-  // ============================================================
+  // ==========================================================
+  // VALIDATE FORM
+  // ==========================================================
 
-  const validatePassword = (value) => {
-    if (!value || value.length === 0) {
-      return "Enter password";
+  const validateForm = () => {
+    const emailValidation = validateEmail(email);
+
+    let passwordValidation = "";
+
+    if (!password.trim()) {
+      passwordValidation = "Please enter your password.";
     }
 
-    if (value.length < 6) {
-      return "Minimum 6 characters";
-    }
+    setEmailError(emailValidation);
+    setPasswordError(passwordValidation);
 
-    return "";
+    return !emailValidation && !passwordValidation;
   };
 
-  // ============================================================
+  // ==========================================================
+  // SAVE PROFILE DATA
+  // ==========================================================
+
+  const saveProfileData = async (profile) => {
+    if (!profile) {
+      return;
+    }
+
+    try {
+      const profileName =
+        profile?.name?.toString() ||
+        profile?.full_name?.toString() ||
+        "";
+
+      const profileImage =
+        profile?.profile_photo?.toString() ||
+        profile?.image?.toString() ||
+        "";
+
+      const profileEmail =
+        profile?.email?.toString() ||
+        email.trim();
+
+      const profileUserId =
+        profile?.user_id?.toString() ||
+        "";
+
+      const roleValue = Array.isArray(profile?.roles)
+        ? JSON.stringify(profile.roles)
+        : profile?.primary_role?.toString() ||
+          profile?.role?.toString() ||
+          "";
+
+      await AsyncStorage.multiSet([
+        ["user", JSON.stringify(profile)],
+
+        ["user_id", profileUserId],
+        ["userid", profileUserId],
+
+        ["name", profileName],
+        ["email", profileEmail],
+        ["image", profileImage],
+
+        ["role", roleValue],
+
+        [
+          "profile_completed",
+          profile?.profile_completed ? "true" : "false",
+        ],
+
+        [
+          "onboarding_step",
+          profile?.onboarding_step?.toString() || "",
+        ],
+      ]);
+    } catch (error) {
+      console.log("SAVE PROFILE ERROR:", error);
+    }
+  };
+
+  // ==========================================================
   // GET USER PROFILE
-  // ============================================================
+  // ==========================================================
 
   const getUserProfile = async (token) => {
     try {
@@ -107,162 +173,67 @@ const LoginScreen = () => {
         {
           method: "GET",
           headers: {
+            Accept: "application/json",
             Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
           },
         }
       );
 
-      const text = await response.text();
+      const responseText = await response.text();
 
-      console.log("PROFILE STATUS:", response.status);
-      console.log("PROFILE RESPONSE:", text);
+      let data = {};
 
-      if (response.status === 200) {
-        let data = {};
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        data = {};
+      }
 
-        try {
-          data = JSON.parse(text);
-        } catch (jsonError) {
-          console.log("PROFILE JSON PARSE ERROR:", jsonError);
-          return;
-        }
+      console.log(
+        "PROFILE STATUS:",
+        response.status
+      );
 
-        const profile = data?.profile;
-
-        if (!profile) {
-          console.log("Profile object not found");
-          return;
-        }
-
-        // ======================================================
-        // SAVE PROFILE DATA
-        // ======================================================
-
-        await AsyncStorage.setItem(
-          "name",
-          profile?.name || ""
-        );
-
-        await AsyncStorage.setItem(
-          "image",
-          profile?.profile_photo || ""
-        );
-
-        await AsyncStorage.setItem(
-          "email",
-          profile?.email || ""
-        );
-
-        // Save complete user object
-        const userObject = {
-          user_id: profile?.user_id || "",
-          name: profile?.name || "",
-          image: profile?.profile_photo || "",
-          email: profile?.email || "",
-          phone_number: profile?.phone_number || null,
-          phone: profile?.phone || null,
-          bio: profile?.bio || null,
-          gender: profile?.gender || null,
-          dob: profile?.dob || null,
-          roles: profile?.roles || [],
-          primary_role: profile?.primary_role || "",
-          role_count: profile?.role_count || 0,
-          is_verified: profile?.is_verified || false,
-          is_blocked: profile?.is_blocked || false,
-          profile_completed:
-            profile?.profile_completed || false,
-          onboarding_step:
-            profile?.onboarding_step || 0,
-          address_info:
-            profile?.address_info || {},
-          current_location:
-            profile?.current_location || {},
-          last_location:
-            profile?.last_location || {},
-          saved_addresses:
-            profile?.saved_addresses || [],
-          active_address_id:
-            profile?.active_address_id || null,
-          preferences:
-            profile?.preferences || {},
-          kitchen:
-            profile?.kitchen || null,
-          ratings_summary:
-            profile?.ratings_summary || {},
-          order_stats:
-            profile?.order_stats || {},
-          activity:
-            profile?.activity || {},
-          device_token:
-            profile?.device_token || null,
-        };
-
-        await AsyncStorage.setItem(
-          "user",
-          JSON.stringify(userObject)
-        );
-
-        console.log("PROFILE SAVED SUCCESSFULLY");
-
-        return profile;
-      } else {
+      if (!response.ok) {
         console.log(
-          "PROFILE API FAILED:",
-          response.status
+          "PROFILE ERROR:",
+          data?.detail || data?.message || responseText
         );
 
         return null;
       }
+
+      const profile = data?.profile || data;
+
+      await saveProfileData(profile);
+
+      return profile;
     } catch (error) {
-      console.log("PROFILE ERROR:", error);
+      console.log("GET PROFILE ERROR:", error);
       return null;
     }
   };
 
-  // ============================================================
-  // LOGIN API
-  // ============================================================
+  // ==========================================================
+  // HANDLE LOGIN
+  // ==========================================================
 
   const loginUser = async () => {
-    // Hide keyboard
-    Keyboard.dismiss();
-
-    // Clear previous errors
-    setEmailError("");
-    setPasswordError("");
-
-    // ============================================================
-    // VALIDATION
-    // ============================================================
-
-    const emailValidation = validateEmail(email);
-    const passwordValidation = validatePassword(password);
-
-    if (emailValidation) {
-      setEmailError(emailValidation);
-    }
-
-    if (passwordValidation) {
-      setPasswordError(passwordValidation);
-    }
-
-    if (emailValidation || passwordValidation) {
+    if (loading) {
       return;
     }
 
-    // ============================================================
-    // START LOADING
-    // ============================================================
+    const isValid = validateForm();
 
-    setIsLoading(true);
+    if (!isValid) {
+      return;
+    }
+
+    const cleanEmail = email.trim();
+    const cleanPassword = password.trim();
 
     try {
-      console.log("LOGIN REQUEST STARTED");
-
-      // ==========================================================
-      // LOGIN REQUEST
-      // ==========================================================
+      setLoading(true);
 
       const response = await fetch(
         `${BASE_URL}/api/v1/users/login`,
@@ -271,281 +242,192 @@ const LoginScreen = () => {
 
           headers: {
             "Content-Type": "application/json",
+            Accept: "application/json",
           },
 
           body: JSON.stringify({
-            email: email.trim(),
-            password: password.trim(),
+            email: cleanEmail,
+            password: cleanPassword,
           }),
         }
       );
 
-      const text = await response.text();
+      const responseText = await response.text();
+
+      let data = {};
+
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        data = {};
+      }
 
       console.log(
         "LOGIN STATUS:",
         response.status
       );
 
-      console.log(
-        "LOGIN RESPONSE:",
-        text
-      );
+      if (!response.ok) {
+        const errorMessage =
+          data?.detail ||
+          data?.message ||
+          "Invalid email or password.";
 
-      // ==========================================================
-      // PARSE RESPONSE
-      // ==========================================================
-
-      let data = {};
-
-      try {
-        data = JSON.parse(text);
-      } catch (jsonError) {
-        console.log(
-          "JSON PARSE ERROR:",
-          jsonError
+        Alert.alert(
+          "Login Failed",
+          typeof errorMessage === "string"
+            ? errorMessage
+            : "Unable to login. Please check your credentials."
         );
-      }
-
-      // ==========================================================
-      // LOGIN SUCCESS
-      // ==========================================================
-
-      if (response.status === 200) {
-        // ======================================================
-        // GET ACCESS TOKEN
-        // ======================================================
-
-        const token =
-          data?.access_token?.toString() || "";
-
-        // ======================================================
-        // GET REFRESH TOKEN
-        // ======================================================
-
-        const refreshToken =
-          data?.refresh_token?.toString() || "";
-
-        // ======================================================
-        // GET USER ID
-        // ======================================================
-
-        const userId =
-          data?.user_id?.toString() || "";
-
-        // ======================================================
-        // GET EMAIL
-        // ======================================================
-
-        const loggedInEmail =
-          data?.email?.toString() ||
-          email.trim();
-
-        console.log("LOGIN SUCCESS");
-        console.log("USER ID:", userId);
-
-        // ======================================================
-        // CHECK ACCESS TOKEN
-        // ======================================================
-
-        if (!token) {
-          Alert.alert(
-            "Login Failed",
-            "Access token was not received from the server."
-          );
-
-          return;
-        }
-
-        // ======================================================
-        // SAVE ACCESS TOKEN
-        // ======================================================
-
-        await AsyncStorage.setItem(
-          "access_token",
-          token
-        );
-
-        // ======================================================
-        // SAVE REFRESH TOKEN
-        // ======================================================
-
-        if (refreshToken) {
-          await AsyncStorage.setItem(
-            "refresh_token",
-            refreshToken
-          );
-        }
-
-        // ======================================================
-        // SAVE USER ID
-        // ======================================================
-
-        if (userId) {
-          await AsyncStorage.setItem(
-            "user_id",
-            userId
-          );
-
-          // Also save userid because some parts
-          // of the app may use this key.
-          await AsyncStorage.setItem(
-            "userid",
-            userId
-          );
-        }
-
-        // ======================================================
-        // SAVE EMAIL
-        // ======================================================
-
-        await AsyncStorage.setItem(
-          "email",
-          loggedInEmail
-        );
-
-        // ======================================================
-        // SAVE ROLE
-        // ======================================================
-
-        if (data?.role) {
-          await AsyncStorage.setItem(
-            "role",
-            JSON.stringify(data.role)
-          );
-        }
-
-        // ======================================================
-        // SAVE PROFILE COMPLETION STATUS
-        // ======================================================
-
-        await AsyncStorage.setItem(
-          "profile_completed",
-          String(
-            data?.profile_completed || false
-          )
-        );
-
-        // ======================================================
-        // SAVE ONBOARDING STEP
-        // ======================================================
-
-        await AsyncStorage.setItem(
-          "onboarding_step",
-          String(
-            data?.onboarding_step || 0
-          )
-        );
-
-        // ======================================================
-        // GET USER PROFILE
-        // ======================================================
-
-        await getUserProfile(token);
-
-        // ======================================================
-        // VERIFY STORAGE
-        // ======================================================
-
-        const savedUserId =
-          await AsyncStorage.getItem(
-            "user_id"
-          );
-
-        const savedEmail =
-          await AsyncStorage.getItem(
-            "email"
-          );
-
-        console.log(
-          "SAVED USER ID:",
-          savedUserId
-        );
-
-        console.log(
-          "SAVED EMAIL:",
-          savedEmail
-        );
-
-        // ======================================================
-        // NAVIGATE TO MAIN APP
-        // ======================================================
-        //
-        // IMPORTANT:
-        // This is Expo Router.
-        // Do NOT use navigation.reset().
-        //
-        // Your current route file is:
-        //
-        // src/app/Main_navigation.jsx
-        //
-        // Therefore the route is:
-        //
-        // /Main_navigation
-        //
-        // ======================================================
-
-        router.replace("/Main_navigation");
 
         return;
       }
 
-      // ============================================================
-      // LOGIN FAILED
-      // ============================================================
+      // ======================================================
+      // GET TOKENS
+      // ======================================================
 
-      let message =
-        data?.message ||
-        data?.detail ||
-        "Login failed";
+      const token =
+        data?.access_token?.toString() || "";
 
-      if (response.status === 401) {
-        message =
-          data?.message ||
-          data?.detail ||
-          "Invalid email or password.";
+      const refreshToken =
+        data?.refresh_token?.toString() || "";
+
+      const userId =
+        data?.user_id?.toString() ||
+        data?.user?.user_id?.toString() ||
+        "";
+
+      const loggedInEmail =
+        data?.email?.toString() ||
+        data?.user?.email?.toString() ||
+        cleanEmail;
+
+      // ======================================================
+      // ACCESS TOKEN REQUIRED
+      // ======================================================
+
+      if (!token) {
+        Alert.alert(
+          "Login Failed",
+          "Login was successful, but no access token was returned by the server."
+        );
+
+        return;
       }
 
-      Alert.alert(
-        "Login Failed",
-        message
-      );
+      // ======================================================
+      // SAVE LOGIN SESSION
+      // ======================================================
+
+      const storageData = [
+        ["access_token", token],
+
+        ["email", loggedInEmail],
+
+        ["user_id", userId],
+        ["userid", userId],
+
+        ["role", ""],
+
+        ["profile_completed", "false"],
+
+        ["onboarding_step", ""],
+      ];
+
+      if (refreshToken) {
+        storageData.push([
+          "refresh_token",
+          refreshToken,
+        ]);
+      }
+
+      await AsyncStorage.multiSet(storageData);
+
+      // ======================================================
+      // GET COMPLETE PROFILE
+      // ======================================================
+
+      const profile = await getUserProfile(token);
+
+      // ======================================================
+      // NAVIGATE TO MAIN NAVIGATION
+      // ======================================================
+
+      router.replace("/Main_navigation");
+
+      // ======================================================
+      // CHECK PROFILE COMPLETION
+      // ======================================================
+
+      if (!profile?.profile_completed) {
+        setTimeout(() => {
+          Alert.alert(
+            "Create Your Profile",
+            "Your profile is incomplete. Please create your profile to continue.",
+            [
+              {
+                text: "Create Profile",
+                onPress: () => {
+                  router.push("/Update_profile_screen");
+                },
+              },
+            ],
+            {
+              cancelable: false,
+            }
+          );
+        }, 700);
+      }
     } catch (error) {
-      console.log(
-        "LOGIN ERROR:",
-        error
-      );
+      console.log("LOGIN ERROR:", error);
 
       Alert.alert(
-        "Error",
+        "Connection Error",
         "Unable to connect to the server. Please check your internet connection and try again."
       );
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  // ============================================================
-  // FORGOT PASSWORD
-  // ============================================================
+  // ==========================================================
+  // EMAIL CHANGE
+  // ==========================================================
 
-  const forgotPassword = () => {
-    if (isLoading) {
-      return;
+  const handleEmailChange = (value) => {
+    setEmail(value);
+
+    if (emailError) {
+      setEmailError("");
     }
+  };
 
+  // ==========================================================
+  // PASSWORD CHANGE
+  // ==========================================================
+
+  const handlePasswordChange = (value) => {
+    setPassword(value);
+
+    if (passwordError) {
+      setPasswordError("");
+    }
+  };
+
+  // ==========================================================
+  // FORGOT PASSWORD
+  // ==========================================================
+
+  const handleForgotPassword = () => {
     router.push("/Forgot_password_screen");
   };
 
-  // ============================================================
+  // ==========================================================
   // REGISTER
-  // ============================================================
+  // ==========================================================
 
-  const register = () => {
-    if (isLoading) {
-      return;
-    }
-
+  const handleRegister = () => {
     router.push({
       pathname: "/Register_details_screen",
       params: {
@@ -554,414 +436,408 @@ const LoginScreen = () => {
     });
   };
 
-  // ============================================================
-  // INPUT COMPONENT
-  // ============================================================
-
-  const Input = ({
-    icon,
-    placeholder,
-    value,
-    onChangeText,
-    keyboardType,
-    secureTextEntry,
-    rightIcon,
-    onRightIconPress,
-    error,
-    autoCapitalize = "none",
-  }) => {
-    return (
-      <View style={styles.inputWrapper}>
-        <View
-          style={[
-            styles.inputContainer,
-            error ? styles.inputError : null,
-          ]}
-        >
-          {/* LEFT ICON */}
-
-          <Ionicons
-            name={icon}
-            size={21}
-            color="#777777"
-            style={styles.inputIcon}
-          />
-
-          {/* INPUT */}
-
-          <TextInput
-            style={styles.input}
-            placeholder={placeholder}
-            placeholderTextColor="#999999"
-            value={value}
-            onChangeText={(text) => {
-              onChangeText(text);
-
-              if (error) {
-                if (placeholder === "Email") {
-                  setEmailError("");
-                }
-
-                if (placeholder === "Password") {
-                  setPasswordError("");
-                }
-              }
-            }}
-            keyboardType={keyboardType}
-            secureTextEntry={secureTextEntry}
-            autoCapitalize={autoCapitalize}
-            autoCorrect={false}
-            editable={!isLoading}
-            returnKeyType={
-              placeholder === "Email"
-                ? "next"
-                : "done"
-            }
-            onSubmitEditing={() => {
-              if (placeholder === "Password") {
-                loginUser();
-              }
-            }}
-          />
-
-          {/* RIGHT ICON */}
-
-          {rightIcon && (
-            <TouchableOpacity
-              onPress={onRightIconPress}
-              disabled={isLoading}
-              style={styles.rightIconButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={rightIcon}
-                size={21}
-                color="#777777"
-              />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* ERROR */}
-
-        {error ? (
-          <Text style={styles.errorText}>
-            {error}
-          </Text>
-        ) : null}
-      </View>
-    );
-  };
-
-  // ============================================================
-  // MAIN UI
-  // ============================================================
+  // ==========================================================
+  // UI
+  // ==========================================================
 
   return (
     <SafeAreaView
       style={styles.safeArea}
-      edges={["top", "bottom", "left", "right"]}
+      edges={["top", "bottom"]}
     >
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : undefined
-        }
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={COLORS.background1}
+      />
+
+      <LinearGradient
+        colors={[
+          COLORS.background1,
+          COLORS.background2,
+          COLORS.background3,
+        ]}
+        style={styles.container}
       >
-        <Pressable
-          style={styles.flex}
-          onPress={Keyboard.dismiss}
+        <KeyboardAvoidingView
+          style={styles.keyboardView}
+          behavior={
+            Platform.OS === "ios"
+              ? "padding"
+              : undefined
+          }
         >
-          <LinearGradient
-            colors={[
-              COLORS.background1,
-              COLORS.background2,
-              COLORS.background3,
-            ]}
-            start={{
-              x: 0,
-              y: 0,
-            }}
-            end={{
-              x: 1,
-              y: 1,
-            }}
-            style={styles.container}
+          <ScrollView
+            contentContainerStyle={
+              styles.scrollContent
+            }
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <ScrollView
-              contentContainerStyle={
-                styles.scrollContent
-              }
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.content}>
-                {/* ================================================= */}
-                {/* LOGO */}
-                {/* ================================================= */}
+            {/* ==================================================
+                LOGO
+            ================================================== */}
 
-                <LinearGradient
-                  colors={[COLORS.orange, COLORS.gold]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.logoOuter}
-                >
-                  <View style={styles.logoInner}>
-                    <Image
-                      source={require("../../assets/images/home-cookt-logo.png")}
-                      style={styles.logoImage}
-                      resizeMode="contain"
-                    />
-                  </View>
-                </LinearGradient>
+            <View style={styles.logoSection}>
+              <LinearGradient
+                colors={[
+                  COLORS.orange,
+                  COLORS.gold,
+                ]}
+                style={styles.logoOuter}
+              >
+                <View style={styles.logoInner}>
+                  <Image
+                    source={require("../../assets/images/home-cookt-logo.png")}
+                    style={styles.logo}
+                    resizeMode="contain"
+                  />
+                </View>
+              </LinearGradient>
 
-                {/* ================================================= */}
-                {/* TITLE */}
-                {/* ================================================= */}
+              <Text style={styles.title}>
+                Welcome Back
+              </Text>
 
-                <Text style={styles.title}>
-                  Welcome Back
+              <Text style={styles.subtitle}>
+                Login to continue to HomeCookt
+              </Text>
+            </View>
+
+            {/* ==================================================
+                FORM CARD
+            ================================================== */}
+
+            <View style={styles.formCard}>
+              {/* ==================================================
+                  EMAIL
+              ================================================== */}
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>
+                  Email Address
                 </Text>
 
-                {/* ================================================= */}
-                {/* FORM CARD */}
-                {/* ================================================= */}
-
-                <View style={styles.formCard}>
-                  {/* EMAIL */}
-
-                  <Input
-                    icon="mail-outline"
-                    placeholder="Email"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    error={emailError}
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    emailError &&
+                      styles.inputWrapperError,
+                  ]}
+                >
+                  <Ionicons
+                    name="mail-outline"
+                    size={21}
+                    color={
+                      emailError
+                        ? "#D32F2F"
+                        : COLORS.orange
+                    }
+                    style={styles.inputIcon}
                   />
 
-                  {/* PASSWORD */}
+                  <TextInput
+                    value={email}
+                    onChangeText={
+                      handleEmailChange
+                    }
+                    placeholder="Enter your email"
+                    placeholderTextColor="#999999"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!loading}
+                    returnKeyType="next"
+                    style={styles.input}
+                  />
+                </View>
 
-                  <Input
-                    icon="lock-closed-outline"
-                    placeholder="Password"
+                {!!emailError && (
+                  <Text style={styles.errorText}>
+                    {emailError}
+                  </Text>
+                )}
+              </View>
+
+              {/* ==================================================
+                  PASSWORD
+              ================================================== */}
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>
+                  Password
+                </Text>
+
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    passwordError &&
+                      styles.inputWrapperError,
+                  ]}
+                >
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={21}
+                    color={
+                      passwordError
+                        ? "#D32F2F"
+                        : COLORS.orange
+                    }
+                    style={styles.inputIcon}
+                  />
+
+                  <TextInput
                     value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={
-                      obscurePassword
+                    onChangeText={
+                      handlePasswordChange
                     }
-                    rightIcon={
-                      obscurePassword
-                        ? "eye-off-outline"
-                        : "eye-outline"
+                    placeholder="Enter your password"
+                    placeholderTextColor="#999999"
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!loading}
+                    returnKeyType="done"
+                    onSubmitEditing={
+                      loginUser
                     }
-                    onRightIconPress={() =>
-                      setObscurePassword(
+                    style={styles.input}
+                  />
+
+                  <TouchableOpacity
+                    onPress={() =>
+                      setShowPassword(
                         (previous) =>
                           !previous
                       )
                     }
-                    error={passwordError}
-                  />
-
-                  {/* ================================================= */}
-                  {/* FORGOT PASSWORD */}
-                  {/* ================================================= */}
-
-                  <View
-                    style={
-                      styles.forgotContainer
-                    }
-                  >
-                    <TouchableOpacity
-                      onPress={forgotPassword}
-                      disabled={isLoading}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={styles.forgotText}
-                      >
-                        Forgot Password?
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* ================================================= */}
-                  {/* LOGIN BUTTON */}
-                  {/* ================================================= */}
-
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={loginUser}
-                    disabled={isLoading}
-                    style={
-                      styles.loginButtonWrapper
-                    }
-                  >
-                    <LinearGradient
-                      colors={[
-                        COLORS.orange,
-                        COLORS.gold,
-                      ]}
-                      start={{
-                        x: 0,
-                        y: 0,
-                      }}
-                      end={{
-                        x: 1,
-                        y: 0,
-                      }}
-                      style={styles.loginButton}
-                    >
-                      {isLoading ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={COLORS.white}
-                        />
-                      ) : (
-                        <>
-                          <Text
-                            style={
-                              styles.loginButtonText
-                            }
-                          >
-                            Login
-                          </Text>
-
-                          <Ionicons
-                            name="arrow-forward"
-                            size={21}
-                            color={COLORS.white}
-                          />
-                        </>
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
-
-                  {/* ================================================= */}
-                  {/* REGISTER */}
-                  {/* ================================================= */}
-
-                  <TouchableOpacity
-                    onPress={register}
-                    disabled={isLoading}
-                    style={
-                      styles.registerButton
-                    }
+                    disabled={loading}
+                    style={styles.eyeButton}
                     activeOpacity={0.7}
                   >
-                    <Text
-                      style={styles.registerText}
-                    >
-                      Don't have an account?{" "}
-                      <Text
-                        style={
-                          styles.registerHighlight
-                        }
-                      >
-                        Sign Up
-                      </Text>
-                    </Text>
+                    <Ionicons
+                      name={
+                        showPassword
+                          ? "eye-outline"
+                          : "eye-off-outline"
+                      }
+                      size={22}
+                      color={COLORS.muted}
+                    />
                   </TouchableOpacity>
                 </View>
+
+                {!!passwordError && (
+                  <Text style={styles.errorText}>
+                    {passwordError}
+                  </Text>
+                )}
               </View>
-            </ScrollView>
-          </LinearGradient>
-        </Pressable>
-      </KeyboardAvoidingView>
+
+              {/* ==================================================
+                  FORGOT PASSWORD
+              ================================================== */}
+
+              <TouchableOpacity
+                onPress={handleForgotPassword}
+                disabled={loading}
+                activeOpacity={0.7}
+                style={styles.forgotButton}
+              >
+                <Text style={styles.forgotText}>
+                  Forgot Password?
+                </Text>
+              </TouchableOpacity>
+
+              {/* ==================================================
+                  LOGIN BUTTON
+              ================================================== */}
+
+              <TouchableOpacity
+                onPress={loginUser}
+                disabled={loading}
+                activeOpacity={0.85}
+                style={[
+                  styles.loginButtonWrapper,
+                  loading &&
+                    styles.loginButtonDisabled,
+                ]}
+              >
+                <LinearGradient
+                  colors={[
+                    COLORS.orange,
+                    COLORS.gold,
+                  ]}
+                  start={{
+                    x: 0,
+                    y: 0,
+                  }}
+                  end={{
+                    x: 1,
+                    y: 0,
+                  }}
+                  style={styles.loginButton}
+                >
+                  {loading ? (
+                    <>
+                      <ActivityIndicator
+                        size="small"
+                        color={COLORS.white}
+                      />
+
+                      <Text
+                        style={
+                          styles.loginButtonText
+                        }
+                      >
+                        Logging In...
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text
+                        style={
+                          styles.loginButtonText
+                        }
+                      >
+                        Login
+                      </Text>
+
+                      <Ionicons
+                        name="arrow-forward"
+                        size={21}
+                        color={COLORS.white}
+                      />
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* ==================================================
+                  REGISTER
+              ================================================== */}
+
+              <View style={styles.registerRow}>
+                <Text style={styles.registerText}>
+                  Don't have an account?
+                </Text>
+
+                <TouchableOpacity
+                  onPress={handleRegister}
+                  disabled={loading}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={
+                      styles.registerLink
+                    }
+                  >
+                    Sign Up
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* ==================================================
+                FOOTER
+            ================================================== */}
+
+            <View style={styles.footer}>
+              <View style={styles.footerLine} />
+
+              <Text style={styles.footerText}>
+                Fresh. Homemade. Delivered.
+              </Text>
+
+              <Text style={styles.footerCopyright}>
+                © HomeCookt
+              </Text>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
     </SafeAreaView>
   );
-};
-
-export default LoginScreen;
+}
 
 // ============================================================
 // STYLES
 // ============================================================
 
 const styles = StyleSheet.create({
-  // ==========================================================
-  // GENERAL
-  // ==========================================================
-
-  flex: {
-    flex: 1,
-  },
-
   safeArea: {
     flex: 1,
-    backgroundColor: COLORS.background2,
+    backgroundColor: COLORS.background1,
   },
 
   container: {
     flex: 1,
   },
 
-  scrollContent: {
-    flexGrow: 1,
-    padding: 24,
-    justifyContent: "center",
+  keyboardView: {
+    flex: 1,
   },
 
-  content: {
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 22,
+    paddingTop: 30,
+    paddingBottom: 25,
   },
 
   // ==========================================================
   // LOGO
   // ==========================================================
 
-  logoOuter: {
-    width: 128,
-    height: 128,
-    borderRadius: 36,
-
+  logoSection: {
     alignItems: "center",
+    marginBottom: 28,
+  },
+
+  logoOuter: {
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    padding: 4,
     justifyContent: "center",
+    alignItems: "center",
 
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 7,
+      height: 5,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-
-    elevation: 7,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 6,
   },
 
   logoInner: {
-    width: 114,
-    height: 114,
-    borderRadius: 32,
-
+    width: "100%",
+    height: "100%",
+    borderRadius: 54,
     backgroundColor: COLORS.white,
-
-    alignItems: "center",
     justifyContent: "center",
-
+    alignItems: "center",
     overflow: "hidden",
   },
 
-  logoImage: {
-    width: 98,
-    height: 98,
+  logo: {
+    width: 84,
+    height: 84,
   },
-  // ==========================================================
-  // TITLE
-  // ==========================================================
 
   title: {
-    marginTop: 24,
-
-    fontSize: 26,
+    marginTop: 20,
+    fontSize: 29,
     fontWeight: "800",
-
     color: COLORS.foreground,
+    textAlign: "center",
+  },
 
+  subtitle: {
+    marginTop: 7,
+    fontSize: 14,
+    color: COLORS.muted,
     textAlign: "center",
   },
 
@@ -970,49 +846,41 @@ const styles = StyleSheet.create({
   // ==========================================================
 
   formCard: {
-    width: "100%",
-
-    marginTop: 32,
-
-    padding: 24,
-
+    backgroundColor: "rgba(255,255,255,0.94)",
     borderRadius: 24,
-
-    backgroundColor:
-      "rgba(255,255,255,0.72)",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
 
     borderWidth: 1,
-
-    borderColor:
-      "rgba(255,255,255,0.9)",
+    borderColor: "rgba(229,229,229,0.8)",
 
     shadowColor: "#000",
-
     shadowOffset: {
       width: 0,
-      height: 8,
+      height: 7,
     },
-
     shadowOpacity: 0.08,
-
-    shadowRadius: 20,
-
-    elevation: 4,
+    shadowRadius: 16,
+    elevation: 5,
   },
 
   // ==========================================================
   // INPUT
   // ==========================================================
 
-  inputWrapper: {
-    width: "100%",
-    marginBottom: 16,
+  inputContainer: {
+    marginBottom: 18,
   },
 
-  inputContainer: {
-    width: "100%",
-    height: 54,
+  label: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.foreground,
+    marginBottom: 8,
+  },
 
+  inputWrapper: {
+    height: 54,
     flexDirection: "row",
     alignItems: "center",
 
@@ -1020,17 +888,16 @@ const styles = StyleSheet.create({
       COLORS.inputBackground,
 
     borderWidth: 1,
-
-    borderColor:
-      COLORS.border,
+    borderColor: COLORS.border,
 
     borderRadius: 14,
 
     paddingHorizontal: 14,
   },
 
-  inputError: {
-    borderColor: "#E53935",
+  inputWrapperError: {
+    borderColor: "#D32F2F",
+    borderWidth: 1.2,
   },
 
   inputIcon: {
@@ -1039,51 +906,43 @@ const styles = StyleSheet.create({
 
   input: {
     flex: 1,
-
     height: "100%",
 
     fontSize: 15,
-
     color: COLORS.foreground,
 
     paddingVertical: 0,
   },
 
-  rightIconButton: {
-    width: 35,
-    height: 45,
-
-    alignItems: "center",
+  eyeButton: {
+    width: 38,
+    height: 44,
     justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 4,
   },
 
   errorText: {
-    marginTop: 5,
-    marginLeft: 4,
-
+    color: "#D32F2F",
     fontSize: 12,
-
-    color: "#E53935",
+    marginTop: 6,
+    marginLeft: 3,
   },
 
   // ==========================================================
-  // FORGOT PASSWORD
+  // FORGOT
   // ==========================================================
 
-  forgotContainer: {
-    alignItems: "flex-end",
-
-    marginTop: -4,
-
-    marginBottom: 12,
+  forgotButton: {
+    alignSelf: "flex-end",
+    marginTop: -2,
+    marginBottom: 22,
   },
 
   forgotText: {
+    fontSize: 13,
+    fontWeight: "700",
     color: COLORS.orange,
-
-    fontSize: 14,
-
-    fontWeight: "600",
   },
 
   // ==========================================================
@@ -1092,61 +951,89 @@ const styles = StyleSheet.create({
 
   loginButtonWrapper: {
     width: "100%",
-
     borderRadius: 15,
-
     overflow: "hidden",
 
-    marginTop: 4,
+    shadowColor: COLORS.orange,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+
+  loginButtonDisabled: {
+    opacity: 0.7,
   },
 
   loginButton: {
-    height: 54,
+    height: 55,
 
     flexDirection: "row",
-
     alignItems: "center",
-
     justifyContent: "center",
 
     gap: 10,
-
-    borderRadius: 15,
   },
 
   loginButtonText: {
     color: COLORS.white,
-
     fontSize: 16,
-
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   // ==========================================================
   // REGISTER
   // ==========================================================
 
-  registerButton: {
+  registerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
 
-    justifyContent: "center",
-
-    marginTop: 16,
-
-    paddingVertical: 8,
+    marginTop: 23,
   },
 
   registerText: {
-    fontSize: 14,
-
     color: COLORS.muted,
-
-    textAlign: "center",
+    fontSize: 14,
   },
 
-  registerHighlight: {
+  registerLink: {
     color: COLORS.orange,
+    fontSize: 14,
+    fontWeight: "800",
+    marginLeft: 5,
+  },
 
-    fontWeight: "700",
+  // ==========================================================
+  // FOOTER
+  // ==========================================================
+
+  footer: {
+    alignItems: "center",
+    marginTop: 28,
+  },
+
+  footerLine: {
+    width: 55,
+    height: 3,
+    borderRadius: 3,
+    backgroundColor: COLORS.gold,
+    marginBottom: 10,
+  },
+
+  footerText: {
+    fontSize: 12,
+    color: COLORS.muted,
+    fontWeight: "600",
+  },
+
+  footerCopyright: {
+    fontSize: 11,
+    color: "#999999",
+    marginTop: 5,
   },
 });
